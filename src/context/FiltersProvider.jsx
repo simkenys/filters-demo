@@ -1,13 +1,9 @@
-import React, {
-  createContext,
-  useContext,
-  useReducer,
-  useMemo,
-  useRef,
-} from "react";
+// src/context/FiltersProvider.js
+import { createContext, useContext, useReducer, useMemo, useRef } from "react";
 import { useFilterConfig } from "../hooks/useFilterConfig";
 
 const FiltersContext = createContext();
+
 const filterConfig = useFilterConfig();
 const DEFAULT_STATE = filterConfig.reduce((acc, f) => {
   acc[f.name] = f.defaultValue;
@@ -33,7 +29,7 @@ function filtersReducer(state, action) {
 
 export const FiltersProvider = ({ children }) => {
   const [state, dispatch] = useReducer(filtersReducer, DEFAULT_STATE);
-  const depsRef = useRef(new Map());
+  const depsRef = useRef(new Map()); // childName => dependsOn[]
 
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
@@ -42,17 +38,12 @@ export const FiltersProvider = ({ children }) => {
 
   const set = (key, value) => {
     dispatch({ type: "SET", key, value });
+    // Do NOT reset children here; child components will self-validate
   };
 
-  const value = useMemo(
-    () => ({
-      state,
-      set,
-      reset: () => dispatch({ type: "RESET" }),
-      registerDeps,
-    }),
-    [state]
-  );
+  const reset = () => dispatch({ type: "RESET" });
+
+  const value = useMemo(() => ({ state, set, reset, registerDeps }), [state]);
 
   return (
     <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>

@@ -1,8 +1,10 @@
-// hooks/useFilterConfig.js
+// src/hooks/useFilterConfig.js
+
 import { ALL_OPTION } from "../constants/filters";
 
 /**
- * Centralized filter definitions
+ * Centralized filter definitions.
+ * Add new filters here. defaultValue must be ALL_OPTION (or another appropriate default).
  */
 export const useFilterConfig = () => [
   {
@@ -23,4 +25,7 @@ export const useFilterConfig = () => [
     dependsOn: ["country", "city"],
     defaultValue: ALL_OPTION,
   },
+
+  // Example: you can add many more filters, possibly deep dependency chains
+  // { name: "neighbourhood", label: "Neighbourhood", dependsOn: ["country","city","store"], defaultValue: ALL_OPTION },
 ];

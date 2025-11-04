@@ -1,6 +1,7 @@
-export const ALL_OPTION = { id: -1, label: "All" };
+// src/hooks/useFakeData.js
+// DEV / demo fake fetchers - replace in production by calling setFilterFetchers(...)
+import { ALL_OPTION } from "../constants/filters";
 
-// -------------------- Fake Data --------------------
 const FAKE_COUNTRIES = [
   { id: 1, label: "United States" },
   { id: 2, label: "Belgium" },
@@ -21,14 +22,15 @@ const FAKE_STORES = [
   { id: 4, countryId: 3, cityId: 4, label: "Store D" },
 ];
 
-// -------------------- Fake Fetches (DEV) --------------------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export const fetchCountries = async () => {
-  await new Promise((r) => setTimeout(r, 100));
+  await sleep(80);
   return [ALL_OPTION, ...FAKE_COUNTRIES];
 };
 
 export const fetchCities = async ({ parentValues }) => {
-  await new Promise((r) => setTimeout(r, 100));
+  await sleep(80);
   const [country] = parentValues;
   const filtered =
     !country || country.id === -1
@@ -38,7 +40,7 @@ export const fetchCities = async ({ parentValues }) => {
 };
 
 export const fetchStores = async ({ parentValues }) => {
-  await new Promise((r) => setTimeout(r, 100));
+  await sleep(80);
   const [country, city] = parentValues;
   let filtered = FAKE_STORES;
   if (country && country.id !== -1)

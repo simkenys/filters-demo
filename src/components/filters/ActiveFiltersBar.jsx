@@ -1,4 +1,5 @@
-// components/filters/ActiveFiltersBar.js
+// src/components/filters/ActiveFiltersBar.js
+import React from "react";
 import { Box, Typography, Chip, IconButton } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
 import { useFilters } from "../../context/FiltersProvider";
