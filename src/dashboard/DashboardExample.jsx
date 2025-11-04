@@ -1,11 +1,13 @@
-// src/pages/DashboardExample.js
 import { useEffect } from "react";
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../context/FiltersProvider";
+import { filterConfig } from "../hooks/useFilterconfig";
 import FilterSelect from "../components/filters/FilterSelect";
 import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
-import { useFilterConfig } from "../hooks/useFilterconfig";
 
+/**
+ * Main Dashboard wrapper with FiltersProvider
+ */
 export default function DashboardExample() {
   return (
     <FiltersProvider>
@@ -14,36 +16,53 @@ export default function DashboardExample() {
   );
 }
 
+/**
+ * Inner dashboard component that consumes filters
+ */
 function DashboardInner() {
   const { state } = useFilters();
-  const cfg = useFilterConfig();
 
+  // Example: trigger API call whenever filters change
   useEffect(() => {
-    // production: your data fetch should use the filter state
     console.log("Fetch data with filters:", state);
+    // Production: replace with actual API call here
   }, [state]);
 
   return (
     <Box p={3} display="flex" flexDirection="column" gap={3}>
       <Typography variant="h5" fontWeight="bold">
-        Production-ready Dynamic Filters (20)
+        Dynamic Filter Dashboard
       </Typography>
 
+      {/* -------------------- Filter selects -------------------- */}
       <Box display="flex" gap={2} flexWrap="wrap">
-        {cfg.map((f) => (
+        {filterConfig.map((f) => (
           <Box key={f.name} width={250}>
-            <FilterSelect name={f.name} debounceMs={200} extraDeps={[]} />
+            <FilterSelect name={f.name} />
           </Box>
         ))}
       </Box>
 
+      {/* -------------------- Active filters bar -------------------- */}
       <ActiveFiltersBar />
 
-      <Box
-        component="pre"
-        sx={{ bgcolor: "grey.100", p: 2, borderRadius: 1, overflow: "auto" }}
-      >
-        {JSON.stringify(state, null, 2)}
+      {/* -------------------- Debug: current filter state -------------------- */}
+      <Box>
+        <Typography variant="body2" fontWeight="bold" gutterBottom>
+          Current Filter State:
+        </Typography>
+        <Box
+          component="pre"
+          sx={{
+            bgcolor: "grey.100",
+            p: 2,
+            borderRadius: 1,
+            overflow: "auto",
+            fontSize: "0.875rem",
+          }}
+        >
+          {JSON.stringify(state, null, 2)}
+        </Box>
       </Box>
     </Box>
   );

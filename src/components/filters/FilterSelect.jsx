@@ -1,5 +1,4 @@
-// src/components/filters/FilterSelect.js
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import {
   FormControl,
   InputLabel,
@@ -8,55 +7,61 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { useFilters } from "../../context/FiltersProvider";
+import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
-import { useFilterConfig } from "../../hooks/useFilterconfig";
 
-/**
- * props:
- *  - name (string, required)
- *  - debounceMs (optional: validation debounce, default 200)
- *  - extraDeps (optional array forwarded to useFilterOptions)
- */
 export default function FilterSelect({
   name,
   debounceMs = 200,
   extraDeps = [],
 }) {
   const { state, set, registerDeps } = useFilters();
-  const selectedValue = state[name];
+  const conf = filterConfig.find((f) => f.name === name);
+  if (!conf) throw new Error(`FilterSelect: Unknown filter '${name}'`);
 
-  const conf = useFilterConfig().find((c) => c.name === name);
-  if (!conf) throw new Error(`FilterSelect: unknown filter '${name}'`);
-
+  // Full ancestor dependencies
   const dependsOn = conf.dependsOn || [];
-  const parentValues = dependsOn.map((p) => state[p]);
+  const parentValues = useMemo(
+    () => dependsOn.map((p) => state[p]),
+    [...dependsOn.map((p) => state[p]?.id ?? -1)]
+  );
 
-  // fetch options (cache, abort, debounce inside hook)
-  const { options, loading } = useFilterOptions(name, parentValues, extraDeps, {
-    debounceMs: 100,
-  });
+  // Fetch options based on all parent values
+  const { options, loading } = useFilterOptions(name, parentValues, extraDeps);
 
-  // register deps on mount/changes
-  useEffect(() => {
-    registerDeps(name, dependsOn);
-  }, [name, dependsOn, registerDeps]);
+  // Register dependencies for context
+  useEffect(
+    () => registerDeps(name, dependsOn),
+    [name, dependsOn, registerDeps]
+  );
 
-  // debounced validation: only reset if current selection is no longer in options
+  const selectedValue = state[name];
   const valDebounceRef = useRef(null);
+
+  // ------------------------
+  // Full dependency validation
+  // ------------------------
   useEffect(() => {
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
+
     valDebounceRef.current = setTimeout(() => {
+      // Reset only if selected value does NOT exist in filtered options
       if (!selectedValue || selectedValue.id === -1) return;
       const exists = options.some((o) => o.id === selectedValue.id);
-      if (!exists) {
-        set(name, conf.defaultValue);
-      }
+      if (!exists) set(name, conf.defaultValue);
     }, debounceMs);
 
-    return () => {
-      if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
-    };
-  }, [options, selectedValue, name, set, conf.defaultValue, debounceMs]);
+    return () => clearTimeout(valDebounceRef.current);
+  }, [
+    options, // options are already filtered by all parent dependencies
+    selectedValue,
+    name,
+    set,
+    conf.defaultValue,
+    ...dependsOn.map((p) => state[p]?.id ?? -1), // watch all ancestors
+    ...extraDeps,
+    debounceMs,
+  ]);
 
   const handleChange = (e) => {
     const sel = options.find((o) => o.id === e.target.value);
