@@ -6,7 +6,7 @@ import {
   MenuItem,
   CircularProgress,
 } from "@mui/material";
-import { useFilters } from "../../context/FiltersContext";
+import { useFilters } from "../../context/FiltersProvider";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 
 export default function FilterSelect({ name, label, dependsOn = [] }) {

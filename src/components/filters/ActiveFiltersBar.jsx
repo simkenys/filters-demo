@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Typography, Chip, IconButton } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
-import { useFilters } from "../../context/FiltersContext";
+import { useFilters } from "../../context/FiltersProvider";
 
 export default function ActiveFiltersBar() {
   const { state, reset } = useFilters();

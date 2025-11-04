@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Box, Typography } from "@mui/material";
-import { FiltersProvider, useFilters } from "../../context/FiltersContext";
+import { FiltersProvider, useFilters } from "../../context/FiltersProvider";
 import FilterSelect from "../filters/FilterSelect";
 import ActiveFiltersBar from "../filters/ActiveFiltersBar";
 
