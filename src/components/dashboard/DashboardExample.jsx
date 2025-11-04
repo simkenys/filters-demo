@@ -1,11 +1,14 @@
-import React, { useEffect } from "react";
+// components/DashboardExample.js
+import { useEffect } from "react";
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../../context/FiltersProvider";
-import FilterSelect from "../filters/FilterSelect";
+import { useFilterConfig } from "../../hooks/useFilterConfig";
+
 import ActiveFiltersBar from "../filters/ActiveFiltersBar";
+import FilterSelect from "../filters/FilterSelect";
 
 /**
- * Main dashboard wrapper
+ * Main Dashboard wrapper
  */
 export default function DashboardExample() {
   return (
@@ -20,11 +23,11 @@ export default function DashboardExample() {
  */
 function DashboardInner() {
   const { state } = useFilters();
+  const filterConfig = useFilterConfig();
 
-  // Example: trigger data fetch whenever filters change
+  // Example: trigger API fetch whenever filter state changes
   useEffect(() => {
     console.log("Fetch data with filters:", state);
-    // In prod, this is where you'd call your API with the selected filters
   }, [state]);
 
   return (
@@ -33,33 +36,19 @@ function DashboardInner() {
         Filter Dashboard
       </Typography>
 
-      {/* --------------------
-          Filter selects
-          -------------------- */}
+      {/* Render filters dynamically from config */}
       <Box display="flex" gap={2} flexWrap="wrap">
-        <Box width={250}>
-          <FilterSelect name="country" label="Country" />
-        </Box>
-        <Box width={250}>
-          <FilterSelect name="city" label="City" dependsOn={["country"]} />
-        </Box>
-        <Box width={250}>
-          <FilterSelect
-            name="store"
-            label="Store"
-            dependsOn={["country", "city"]}
-          />
-        </Box>
+        {filterConfig.map((f) => (
+          <Box key={f.name} width={250}>
+            <FilterSelect name={f.name} />
+          </Box>
+        ))}
       </Box>
 
-      {/* --------------------
-          Active filters bar
-          -------------------- */}
+      {/* Active filters bar */}
       <ActiveFiltersBar />
 
-      {/* --------------------
-          Debug: show current filter state
-          -------------------- */}
+      {/* Debug: show current filter state */}
       <Box>
         <Typography variant="body2" fontWeight="bold" gutterBottom>
           Current Filter State:

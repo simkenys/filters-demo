@@ -1,19 +1,29 @@
-import React, { createContext, useContext, useReducer, useMemo } from "react";
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useMemo,
+  useRef,
+} from "react";
+import { useFilterConfig } from "../hooks/useFilterConfig";
 
-// -------------------- Default Filter State --------------------
-const DEFAULT_STATE = {
-  country: { id: -1, label: "All" },
-  city: { id: -1, label: "All" },
-  store: { id: -1, label: "All" },
-};
+const FiltersContext = createContext();
+const filterConfig = useFilterConfig();
+const DEFAULT_STATE = filterConfig.reduce((acc, f) => {
+  acc[f.name] = f.defaultValue;
+  return acc;
+}, {});
 
-// -------------------- Reducer --------------------
 function filtersReducer(state, action) {
   switch (action.type) {
     case "SET":
       return { ...state, [action.key]: action.value };
     case "RESET_CHILD":
-      return { ...state, [action.key]: { id: -1, label: "All" } };
+      return {
+        ...state,
+        [action.key]: filterConfig.find((f) => f.name === action.key)
+          ?.defaultValue,
+      };
     case "RESET":
       return { ...DEFAULT_STATE };
     default:
@@ -21,29 +31,23 @@ function filtersReducer(state, action) {
   }
 }
 
-// -------------------- Context --------------------
-// Default values avoid 'never' errors in VSCode
-const FiltersContext = createContext({
-  state: DEFAULT_STATE,
-  set: () => {},
-  reset: () => {},
-  registerDeps: () => {},
-});
-
-// -------------------- Provider --------------------
-export function FiltersProvider({ children }) {
+export const FiltersProvider = ({ children }) => {
   const [state, dispatch] = useReducer(filtersReducer, DEFAULT_STATE);
-  const depsRef = React.useRef(new Map());
+  const depsRef = useRef(new Map());
 
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
     depsRef.current.set(key, dependsOn);
   };
 
+  const set = (key, value) => {
+    dispatch({ type: "SET", key, value });
+  };
+
   const value = useMemo(
     () => ({
       state,
-      set: (key, value) => dispatch({ type: "SET", key, value }),
+      set,
       reset: () => dispatch({ type: "RESET" }),
       registerDeps,
     }),
@@ -53,11 +57,10 @@ export function FiltersProvider({ children }) {
   return (
     <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>
   );
-}
+};
 
-// -------------------- Hook --------------------
-export function useFilters() {
+export const useFilters = () => {
   const ctx = useContext(FiltersContext);
   if (!ctx) throw new Error("useFilters must be used within FiltersProvider");
   return ctx;
-}
+};

@@ -1,33 +1,18 @@
 import { useState, useEffect } from "react";
-import {
-  ALL_OPTION,
-  fetchCountries,
-  fetchCities,
-  fetchStores,
-} from "./useFakeData";
+import { ALL_OPTION } from "../constants/filters";
+
+// Dev fetchers (replace with real API in prod)
+import { fetchCountries, fetchCities, fetchStores } from "./useFakeData";
 
 /**
- * Example fetcher function for SWR
- * @param {string} url
+ * Returns options for a filter and loading state
+ * @param {string} filterName
+ * @param {Array} parentValues
  */
-const fetcher = (url) => fetch(url).then((res) => res.json());
-
-/**
- * Hook to get filter options (countries, cities, stores)
- *
- * parentValues: array of parent filter objects, e.g. [country, city]
- * filterName: 'country' | 'city' | 'store'
- *
- * This hook currently uses fake fetches for dev.
- * In production, replace with SWR + your real API URLs.
- */
-export function useFilterOptions(filterName, parentValues) {
+export const useFilterOptions = (filterName, parentValues) => {
   const [options, setOptions] = useState([ALL_OPTION]);
   const [loading, setLoading] = useState(false);
 
-  // -------------------------
-  // DEV: use fake fetches
-  // -------------------------
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
@@ -37,10 +22,11 @@ export function useFilterOptions(filterName, parentValues) {
       city: fetchCities,
       store: fetchStores,
     };
-    const fetcherFn = fetchMap[filterName];
-    if (!fetcherFn) return;
 
-    fetcherFn({ parentValues })
+    const fetcher = fetchMap[filterName];
+    if (!fetcher) return;
+
+    fetcher({ parentValues })
       .then((opts) => {
         if (isMounted) setOptions(opts);
       })
@@ -53,20 +39,5 @@ export function useFilterOptions(filterName, parentValues) {
     };
   }, [...parentValues.map((v) => v?.id ?? -1), filterName]);
 
-  // -------------------------
-  // PROD: Example SWR usage
-  // -------------------------
-  // const urlMap = {
-  //   country: '/api/countries',                  // GET list of countries
-  //   city: `/api/cities?countryId=${parentValues[0]?.id ?? ''}`,  // GET cities for country
-  //   store: `/api/stores?countryId=${parentValues[0]?.id ?? ''}&cityId=${parentValues[1]?.id ?? ''}` // GET stores
-  // };
-  //
-  // const { data, isLoading } = useSWR(urlMap[filterName], fetcher, {
-  //   revalidateOnFocus: false,
-  // });
-  //
-  // return { options: data ? [ALL_OPTION, ...data] : [ALL_OPTION], loading: isLoading };
-
   return { options, loading };
-}
+};
