@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { filterConfig } from "./useFilterconfig";
 import { ALL_OPTION } from "./useFilterConstants";
+import { filterConfig } from "./useFilterConfig";
 
 /**
  * Production-ready hook to fetch filter options

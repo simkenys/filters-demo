@@ -9,6 +9,7 @@ import {
 import { useFilters } from "../../context/FiltersProvider";
 import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
+import { useSearchParams } from "react-router-dom";
 
 export default function FilterSelect({
   name,
@@ -16,20 +17,19 @@ export default function FilterSelect({
   extraDeps = [],
 }) {
   const { state, set, registerDeps } = useFilters();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const conf = filterConfig.find((f) => f.name === name);
   if (!conf) throw new Error(`FilterSelect: Unknown filter '${name}'`);
 
-  // Full ancestor dependencies
   const dependsOn = conf.dependsOn || [];
   const parentValues = useMemo(
     () => dependsOn.map((p) => state[p]),
     [...dependsOn.map((p) => state[p]?.id ?? -1)]
   );
 
-  // Fetch options based on all parent values
   const { options, loading } = useFilterOptions(name, parentValues, extraDeps);
 
-  // Register dependencies for context
   useEffect(
     () => registerDeps(name, dependsOn),
     [name, dependsOn, registerDeps]
@@ -39,40 +39,56 @@ export default function FilterSelect({
   const valDebounceRef = useRef(null);
 
   // ------------------------
-  // Full dependency validation
+  // Full dependency validation + debounce
   // ------------------------
   useEffect(() => {
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
-      // Reset only if selected value does NOT exist in filtered options
       if (!selectedValue || selectedValue.id === -1) return;
+
       const exists = options.some((o) => o.id === selectedValue.id);
-      if (!exists) set(name, conf.defaultValue);
+      if (!exists) {
+        set(name, conf.defaultValue);
+
+        // Update URL on reset
+        const newParams = new URLSearchParams(searchParams);
+        newParams.set(name, conf.defaultValue.id);
+        setSearchParams(newParams);
+      }
     }, debounceMs);
 
     return () => clearTimeout(valDebounceRef.current);
   }, [
-    options, // options are already filtered by all parent dependencies
+    options,
     selectedValue,
     name,
     set,
     conf.defaultValue,
-    ...dependsOn.map((p) => state[p]?.id ?? -1), // watch all ancestors
+    ...dependsOn.map((p) => state[p]?.id ?? -1),
     ...extraDeps,
     debounceMs,
+    searchParams,
+    setSearchParams,
   ]);
 
   const handleChange = (e) => {
     const sel = options.find((o) => o.id === e.target.value);
-    if (sel) set(name, sel);
+    if (sel) {
+      set(name, sel);
+
+      // Sync selection to URL
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set(name, sel.id);
+      setSearchParams(newParams);
+    }
   };
 
   return (
     <FormControl fullWidth disabled={loading}>
       <InputLabel>{conf.label}</InputLabel>
       <Select
-        value={selectedValue?.id ?? -1}
+        value={selectedValue?.id ?? conf.defaultValue.id}
         onChange={handleChange}
         label={conf.label}
         endAdornment={loading && <CircularProgress size={20} />}

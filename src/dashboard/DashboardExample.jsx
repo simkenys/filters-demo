@@ -1,18 +1,21 @@
-import { useEffect } from "react";
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../context/FiltersProvider";
-import { filterConfig } from "../hooks/useFilterconfig";
 import FilterSelect from "../components/filters/FilterSelect";
 import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
+import { filterConfig } from "../hooks/useFilterConfig";
+import { BrowserRouter } from "react-router-dom";
+import { useEffect } from "react";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
  */
 export default function DashboardExample() {
   return (
-    <FiltersProvider>
-      <DashboardInner />
-    </FiltersProvider>
+    <BrowserRouter>
+      <FiltersProvider>
+        <DashboardInner />
+      </FiltersProvider>
+    </BrowserRouter>
   );
 }
 
