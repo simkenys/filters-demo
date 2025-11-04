@@ -1,11 +1,10 @@
 // src/context/FiltersProvider.js
 import { createContext, useContext, useReducer, useMemo, useRef } from "react";
-import { useFilterConfig } from "../hooks/useFilterConfig";
 
-const FiltersContext = createContext();
+const FiltersContext = createContext(null);
 
-const filterConfig = useFilterConfig();
-const DEFAULT_STATE = filterConfig.reduce((acc, f) => {
+const cfg = useFilterConfig();
+const DEFAULT_STATE = cfg.reduce((acc, f) => {
   acc[f.name] = f.defaultValue;
   return acc;
 }, {});
@@ -17,8 +16,7 @@ function filtersReducer(state, action) {
     case "RESET_CHILD":
       return {
         ...state,
-        [action.key]: filterConfig.find((f) => f.name === action.key)
-          ?.defaultValue,
+        [action.key]: cfg.find((c) => c.name === action.key)?.defaultValue,
       };
     case "RESET":
       return { ...DEFAULT_STATE };
@@ -27,7 +25,7 @@ function filtersReducer(state, action) {
   }
 }
 
-export const FiltersProvider = ({ children }) => {
+export function FiltersProvider({ children }) {
   const [state, dispatch] = useReducer(filtersReducer, DEFAULT_STATE);
   const depsRef = useRef(new Map()); // childName => dependsOn[]
 
@@ -38,20 +36,20 @@ export const FiltersProvider = ({ children }) => {
 
   const set = (key, value) => {
     dispatch({ type: "SET", key, value });
-    // Do NOT reset children here; child components will self-validate
+    // do NOT validate children here; components do self-validation using the options hook
   };
 
   const reset = () => dispatch({ type: "RESET" });
 
-  const value = useMemo(() => ({ state, set, reset, registerDeps }), [state]);
+  const api = useMemo(() => ({ state, set, reset, registerDeps }), [state]);
 
   return (
-    <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>
+    <FiltersContext.Provider value={api}>{children}</FiltersContext.Provider>
   );
-};
+}
 
-export const useFilters = () => {
+export function useFilters() {
   const ctx = useContext(FiltersContext);
-  if (!ctx) throw new Error("useFilters must be used within FiltersProvider");
+  if (!ctx) throw new Error("useFilters must be used inside FiltersProvider");
   return ctx;
-};
+}

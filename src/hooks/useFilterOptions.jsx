@@ -1,97 +1,120 @@
 // src/hooks/useFilterOptions.js
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ALL_OPTION } from "../constants/filters";
-import * as fake from "./useFakeData";
-
-/**
- * Module-level fetcher map (defaults to dev fake fetchers).
- * Use setFilterFetchers() to override this at app start.
- */
-let FETCHERS = {
-  country: fake.fetchCountries,
-  city: fake.fetchCities,
-  store: fake.fetchStores,
-};
+import { useFilterConfig } from "./useFilterConfig";
 
 /**
  * Module-level cache shared across hook instances.
  * Key = JSON.stringify([filterName, parentIdsArray, extraDepsArray])
- * Value = options array
  */
 const moduleCache = new Map();
 
 /**
- * Replace default fetchers (call at app bootstrap in production).
- * e.g. setFilterFetchers({ country: apiFetchCountries, city: apiFetchCities, ... })
+ * Clears the whole cache (call on logout / tenant switch if needed)
  */
-export function setFilterFetchers(fetchers) {
-  FETCHERS = { ...FETCHERS, ...fetchers };
+export function clearFilterOptionsCache() {
+  moduleCache.clear();
 }
 
 /**
  * useFilterOptions
  *
- * @param {string} filterName - filter identifier (must correspond to a fetcher)
- * @param {Array} parentValues - array of parent filter objects, in correct order
- * @param {Array} extraDeps - optional array of primitive values to include in cache key (userId, date range, flags)
+ * @param {string} filterName
+ * @param {Array} parentValues - ordered array of parent filter objects (matching dependsOn order)
+ * @param {Array} extraDeps - optional array of primitives that affect results (userId, orgId, dateRange)
+ * @param {object} opts - optional settings { debounceMs: number }
  */
 export function useFilterOptions(
   filterName,
   parentValues = [],
-  extraDeps = []
+  extraDeps = [],
+  opts = {}
 ) {
+  const { debounceMs = 120 } = opts;
   const [options, setOptions] = useState([ALL_OPTION]);
   const [loading, setLoading] = useState(false);
+  const config = useFilterConfig(); // array of defs with fetcher attached
+  const mountedRef = useRef(true);
+  const controllerRef = useRef(null);
+  const debounceRef = useRef(null);
 
   useEffect(() => {
-    let mounted = true;
-    setLoading(true);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (controllerRef.current) controllerRef.current.abort?.();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
-    // Build stable key: use parent IDs and extraDeps
+  useEffect(() => {
     const parentIds = parentValues.map((v) => v?.id ?? -1);
-    const key = JSON.stringify([filterName, parentIds, extraDeps]);
+    const cacheKey = JSON.stringify([filterName, parentIds, extraDeps]);
 
-    // Cache hit
-    if (moduleCache.has(key)) {
-      setOptions(moduleCache.get(key));
+    // immediate cache hit (fast path)
+    if (moduleCache.has(cacheKey)) {
+      setOptions(moduleCache.get(cacheKey));
       setLoading(false);
       return;
     }
 
-    // Fetcher lookup
-    const fetcher = FETCHERS[filterName];
-    if (!fetcher) {
-      // no fetcher registered: fallback to ALL_OPTION only
-      moduleCache.set(key, [ALL_OPTION]);
-      setOptions([ALL_OPTION]);
-      setLoading(false);
-      return;
-    }
+    // debounce fetching to avoid thrash on rapid parent changes
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const def = config.find((c) => c.name === filterName);
+      if (!def || typeof def.fetcher !== "function") {
+        // no fetcher registered: fallback to ALL
+        const fallback = [ALL_OPTION];
+        moduleCache.set(cacheKey, fallback);
+        if (mountedRef.current) setOptions(fallback);
+        return;
+      }
 
-    // Execute fetcher - fetcher must accept { parentValues, extraDeps? } and return Promise<options[]>
-    fetcher({ parentValues, extraDeps })
-      .then((res) => {
-        if (!mounted) return;
-        const out = Array.isArray(res) && res.length ? res : [ALL_OPTION];
-        moduleCache.set(key, out);
+      // abort previous
+      if (controllerRef.current) {
+        try {
+          controllerRef.current.abort();
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      controllerRef.current = new AbortController();
+      const signal = controllerRef.current.signal;
+
+      setLoading(true);
+      try {
+        // fetcher must return an array of items (without ALL_OPTION)
+        const fetched = await def.fetcher({ parentValues, extraDeps, signal });
+        if (!mountedRef.current) return;
+        const out = Array.isArray(fetched)
+          ? [ALL_OPTION, ...fetched]
+          : [ALL_OPTION];
+        moduleCache.set(cacheKey, out);
         setOptions(out);
-      })
-      .catch((err) => {
-        // production: log error and return safe fallback
-        // eslint-disable-next-line no-console
-        console.error(`useFilterOptions fetch error for ${filterName}`, err);
-        if (mounted) setOptions([ALL_OPTION]);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+      } catch (err) {
+        if (err?.name === "AbortError") {
+          // intentional; do nothing
+        } else {
+          // production: prefer logging to console or a monitoring service
+          // eslint-disable-next-line no-console
+          console.error("useFilterOptions fetch error for", filterName, err);
+          if (mountedRef.current) setOptions([ALL_OPTION]);
+        }
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    }, debounceMs);
 
     return () => {
-      mounted = false;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // NOTE: include primitive values from parentIds & extraDeps in deps array
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterName, ...parentValues.map((v) => v?.id ?? -1), ...extraDeps]);
+  }, [
+    filterName,
+    ...parentValues.map((v) => v?.id ?? -1),
+    ...extraDeps,
+    // debounceMs left out because it's in opts; include if you allow dynamic changes
+  ]);
 
   return { options, loading };
 }

@@ -1,4 +1,4 @@
-import DashboardExample from "./components/dashboard/DashboardExample";
+import DashboardExample from "./dashboard/DashboardExample";
 
 function App() {
   return <DashboardExample />;
