@@ -2,9 +2,9 @@
 import { useEffect } from "react";
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../context/FiltersProvider";
-import { useFilterConfig } from "../hooks/useFilterConfig";
 import FilterSelect from "../components/filters/FilterSelect";
 import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
+import { useFilterConfig } from "../hooks/useFilterconfig";
 
 export default function DashboardExample() {
   return (

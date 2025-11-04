@@ -8,8 +8,8 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { useFilters } from "../../context/FiltersProvider";
-import { useFilterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
+import { useFilterConfig } from "../../hooks/useFilterconfig";
 
 /**
  * props:

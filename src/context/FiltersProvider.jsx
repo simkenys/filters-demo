@@ -1,5 +1,6 @@
 // src/context/FiltersProvider.js
 import { createContext, useContext, useReducer, useMemo, useRef } from "react";
+import { useFilterConfig } from "../hooks/useFilterconfig";
 
 const FiltersContext = createContext(null);
 

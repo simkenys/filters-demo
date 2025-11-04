@@ -1,7 +1,7 @@
 // src/hooks/useFilterOptions.js
 import { useState, useEffect, useRef } from "react";
 import { ALL_OPTION } from "../constants/filters";
-import { useFilterConfig } from "./useFilterConfig";
+import { useFilterConfig } from "./useFilterconfig";
 
 /**
  * Module-level cache shared across hook instances.
