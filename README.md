@@ -30,3 +30,9 @@
 
 - **Router Integration**
   - DashboardExample is wrapped in BrowserRouter to enable URL syncing via useSearchParams.
+
+**Next Todos**
+
+- Add multi-select filters
+- Add autocomplete single-select
+- Add autocomplete multi-select
