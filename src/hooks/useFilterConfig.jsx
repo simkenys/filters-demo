@@ -1,11 +1,13 @@
-import { fetchCity } from "../fetchers/cityFetcher";
-import { fetchContinent } from "../fetchers/continentFetcher";
-import { fetchCountry } from "../fetchers/countryFetcher";
-import { fetchDepartment } from "../fetchers/departmentFetcher";
-import { fetchEmployee } from "../fetchers/exmployeeFetcher";
-import { fetchRegion } from "../fetchers/regionFetcher";
-import { fetchStore } from "../fetchers/storeFetcher";
-import { fetchTeam } from "../fetchers/teamFetcher";
+import {
+  fetchContinent,
+  fetchCity,
+  fetchCountry,
+  fetchDepartment,
+  fetchEmployee,
+  fetchRegion,
+  fetchStore,
+  fetchTeam,
+} from "../fetchers/fetchers";
 import { ALL_OPTION } from "./useFilterConstants";
 
 /**
@@ -23,6 +25,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: [],
     fetcher: fetchContinent,
+    isMulti: true,
   },
   {
     name: "country",

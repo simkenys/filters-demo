@@ -4,9 +4,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
   Checkbox,
   ListItemText,
-  CircularProgress,
 } from "@mui/material";
 import { useFilters } from "../../context/FiltersProvider";
 import { filterConfig } from "../../hooks/useFilterConfig";
@@ -26,10 +26,10 @@ export default function FilterMultiSelect({
 
   const dependsOn = conf.dependsOn || [];
 
-  // Flatten parentValues to handle multi-select parents correctly
+  // Flatten parent values for multi-parent support
   const parentValues = useMemo(
     () =>
-      dependsOn.flatMap((p) => {
+      dependsOn.map((p) => {
         const val = state[p];
         return Array.isArray(val) ? val : val ? [val] : [];
       }),
@@ -48,37 +48,37 @@ export default function FilterMultiSelect({
 
   const { options, loading } = useFilterOptions(name, parentValues, extraDeps);
 
+  // Register dependencies
   useEffect(
     () => registerDeps(name, dependsOn),
     [name, dependsOn, registerDeps]
   );
 
-  const selectedValues = Array.isArray(state[name]) ? state[name] : [];
-  const selectedIds = selectedValues.map((v) => v.id);
-
+  let selectedValues = state[name]; // Always array for multi-select
   const valDebounceRef = useRef(null);
 
-  // -----------------------------
-  // Validate selected values on options change (e.g., parent dependency changes)
-  // -----------------------------
+  // ------------------------
+  // Validation: remove invalid selections
+  // ------------------------
   useEffect(() => {
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
-      if (!selectedValues.length) return;
+      if (!selectedValues || selectedValues.length === 0) return;
 
-      // Filter only valid options
-      const validSelected = selectedValues.filter((sel) =>
-        options.some((o) => o.id === sel.id)
+      const validValues = selectedValues.filter((v) =>
+        options.some((o) => o.id === v.id)
       );
 
-      // If none valid, reset to All (-1)
-      if (validSelected.length === 0) {
-        const allOption = options.find((o) => o.id === -1);
-        if (allOption) set(name, [allOption]);
-      } else if (validSelected.length !== selectedValues.length) {
-        // Remove invalid ones, keep valid
-        set(name, validSelected);
+      if (validValues.length !== selectedValues.length) {
+        const fallback = Array.isArray(conf.defaultValue)
+          ? conf.defaultValue
+          : [conf.defaultValue];
+        set(name, fallback);
+
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete(name); // Remove All-option id from URL
+        setSearchParams(newParams);
       }
     }, debounceMs);
 
@@ -88,53 +88,52 @@ export default function FilterMultiSelect({
     selectedValues,
     name,
     set,
-    ...dependsOn.map((p) => state[p]?.id ?? -1),
-    ...extraDeps,
+    conf.defaultValue,
     debounceMs,
+    searchParams,
+    setSearchParams,
   ]);
 
-  // -----------------------------
-  // Handle user selection / All toggle
-  // -----------------------------
   const handleChange = (e) => {
-    const newIds = e.target.value;
-    const prevIds = selectedIds;
-    const optionsById = Object.fromEntries(options.map((o) => [o.id, o]));
+    // e.target.value is an array of IDs from MUI
+    const selectedIds = e.target.value;
 
-    const added = newIds.filter((id) => !prevIds.includes(id));
-    const removed = prevIds.filter((id) => !newIds.includes(id));
+    // Map IDs back to full option objects
+    let newValues = options.filter((opt) => selectedIds.includes(opt.id));
 
-    let updatedSelection = [];
+    const hasAll = newValues.some((v) => v.id === -1);
+    const hadAll = selectedIds.length > newValues.length; // More IDs selected means All is being removed
 
-    if (added.length) {
-      const clickedId = added[0];
-      if (clickedId === -1) {
-        // All clicked
-        updatedSelection = [optionsById[-1]];
-      } else {
-        // Regular item clicked
-        updatedSelection = newIds
-          .filter((id) => id !== -1)
-          .map((id) => optionsById[id]);
-      }
-    } else if (removed.length) {
-      updatedSelection = newIds.map((id) => optionsById[id]);
-      if (updatedSelection.length === 0) {
-        updatedSelection = options.filter((o) => o.id === -1);
-      }
+    if (hasAll && selectedIds.length === 1) {
+      // ONLY All is selected
+      newValues = Array.isArray(conf.defaultValue)
+        ? conf.defaultValue
+        : [conf.defaultValue];
     } else {
-      updatedSelection = newIds.map((id) => optionsById[id]);
+      // Remove All-option if other options are also selected
+      newValues = newValues.filter((v) => v.id !== -1);
+
+      // If nothing selected, fallback to defaultValue
+      if (newValues.length === 0) {
+        newValues = Array.isArray(conf.defaultValue)
+          ? conf.defaultValue
+          : [conf.defaultValue];
+      }
     }
 
-    set(name, updatedSelection);
+    // Update filter state
+    set(name, newValues);
 
-    // URL sync
+    // Sync URL: only include real IDs, never -1
     const newParams = new URLSearchParams(searchParams);
-    if (updatedSelection.length === 1 && updatedSelection[0].id === -1) {
-      newParams.delete(name);
+    const realIds = newValues.filter((v) => v.id !== -1).map((v) => v.id);
+
+    if (realIds.length > 0) {
+      newParams.set(name, realIds.join(","));
     } else {
-      newParams.set(name, updatedSelection.map((s) => s.id).join(","));
+      newParams.delete(name);
     }
+
     setSearchParams(newParams);
   };
 
@@ -143,20 +142,19 @@ export default function FilterMultiSelect({
       <InputLabel>{conf.label}</InputLabel>
       <Select
         multiple
-        label={conf.label}
-        value={selectedIds}
+        value={selectedValues.map((v) => v.id)}
         onChange={handleChange}
-        renderValue={(selected) => {
-          const labels = options
-            .filter((o) => selected.includes(o.id))
-            .map((o) => o.label);
-          return labels.join(", ");
-        }}
+        label={conf.label}
+        renderValue={(selected) =>
+          selected
+            .map((id) => options.find((o) => o.id === id)?.label || "")
+            .join(", ")
+        }
         endAdornment={loading && <CircularProgress size={20} />}
       >
         {options.map((opt) => (
           <MenuItem key={opt.id} value={opt.id}>
-            <Checkbox checked={selectedIds.includes(opt.id)} />
+            <Checkbox checked={selectedValues.some((v) => v.id === opt.id)} />
             <ListItemText primary={opt.label} />
           </MenuItem>
         ))}

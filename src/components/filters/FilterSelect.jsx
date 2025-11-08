@@ -24,23 +24,25 @@ export default function FilterSelect({
 
   const dependsOn = conf.dependsOn || [];
 
-  // Flatten parent values for multi-parent support
-  const parentValues = useMemo(() => {
-    return dependsOn.flatMap((p) => {
-      const val = state[p];
-      return Array.isArray(val) ? val : val ? [val] : [];
-    });
-  }, [
-    ...dependsOn.map((p) => {
-      const val = state[p];
-      return Array.isArray(val)
-        ? val
-            .map((v) => v.id)
-            .sort()
-            .join(",")
-        : val?.id ?? -1;
-    }),
-  ]);
+  // Parent values structured per parent (array of arrays)
+  const parentValues = useMemo(
+    () =>
+      dependsOn.map((p) => {
+        const val = state[p];
+        return Array.isArray(val) ? val : val ? [val] : [];
+      }),
+    [
+      ...dependsOn.map((p) => {
+        const val = state[p];
+        return Array.isArray(val)
+          ? val
+              .map((v) => v.id)
+              .sort()
+              .join(",")
+          : val?.id ?? -1;
+      }),
+    ]
+  );
 
   const { options, loading } = useFilterOptions(name, parentValues, extraDeps);
 
@@ -61,6 +63,8 @@ export default function FilterSelect({
       const exists = options.some((o) => o.id === selectedValue.id);
       if (!exists) {
         set(name, conf.defaultValue);
+
+        // Update URL on reset
         const newParams = new URLSearchParams(searchParams);
         newParams.set(name, conf.defaultValue.id);
         setSearchParams(newParams);
@@ -93,6 +97,8 @@ export default function FilterSelect({
     const sel = options.find((o) => o.id === e.target.value);
     if (sel) {
       set(name, sel);
+
+      // Sync selection to URL
       const newParams = new URLSearchParams(searchParams);
       newParams.set(name, sel.id);
       setSearchParams(newParams);
