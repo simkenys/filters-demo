@@ -29,8 +29,9 @@ export const resetDependencies = true;
  * - useBackend: whether to fetch from API (true) or use FAKE_* data (false)
  *
  * Switch from dev → prod:
- * - Currently useBackend: false → development with FAKE_* data
- * - Production: set useBackend: true or use process.env.NODE_ENV === "production"
+ * - Currently useBackend: true → development with FAKE_* data is useBackend: false
+ * - Production: set useBackend to true
+ * - Fake data locally: set useBackend to false
  */
 
 export const filterConfig = [
