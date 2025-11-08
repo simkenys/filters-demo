@@ -23,9 +23,25 @@ export default function FilterSelect({
   if (!conf) throw new Error(`FilterSelect: Unknown filter '${name}'`);
 
   const dependsOn = conf.dependsOn || [];
+
+  // Parent values structured per parent (array of arrays)
   const parentValues = useMemo(
-    () => dependsOn.map((p) => state[p]),
-    [...dependsOn.map((p) => state[p]?.id ?? -1)]
+    () =>
+      dependsOn.map((p) => {
+        const val = state[p];
+        return Array.isArray(val) ? val : val ? [val] : [];
+      }),
+    [
+      ...dependsOn.map((p) => {
+        const val = state[p];
+        return Array.isArray(val)
+          ? val
+              .map((v) => v.id)
+              .sort()
+              .join(",")
+          : val?.id ?? -1;
+      }),
+    ]
   );
 
   const { options, loading } = useFilterOptions(name, parentValues, extraDeps);
@@ -38,9 +54,6 @@ export default function FilterSelect({
   const selectedValue = state[name];
   const valDebounceRef = useRef(null);
 
-  // ------------------------
-  // Full dependency validation + debounce
-  // ------------------------
   useEffect(() => {
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
@@ -65,7 +78,15 @@ export default function FilterSelect({
     name,
     set,
     conf.defaultValue,
-    ...dependsOn.map((p) => state[p]?.id ?? -1),
+    ...dependsOn.map((p) => {
+      const val = state[p];
+      return Array.isArray(val)
+        ? val
+            .map((v) => v.id)
+            .sort()
+            .join(",")
+        : val?.id ?? -1;
+    }),
     ...extraDeps,
     debounceMs,
     searchParams,

@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { ALL_OPTION } from "./useFilterConstants";
 import { filterConfig } from "./useFilterConfig";
 
 /**
  * Production-ready hook to fetch filter options
  *
  * @param {string} filterName - name of the filter
- * @param {array} parentValues - array of all ancestor filter values
+ * @param {array} parentValues - array-of-arrays of parent filter values
  * @param {array} extraDeps - optional extra dependencies affecting options
  * @param {object} opts - { debounceMs } optional debounce in ms
  */
@@ -17,12 +16,17 @@ export function useFilterOptions(
   opts = {}
 ) {
   const { debounceMs = 100 } = opts;
-  const [options, setOptions] = useState([ALL_OPTION]);
+  const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef(null);
 
+  // Create stable dependency string
+  const parentValuesKey = JSON.stringify(
+    parentValues.map((arr) => arr.map((v) => v.id ?? -1))
+  );
+  const extraDepsKey = JSON.stringify(extraDeps);
+
   useEffect(() => {
-    // Abort previous request if parentValues change
     if (controllerRef.current) controllerRef.current.abort();
     controllerRef.current = new AbortController();
     const signal = controllerRef.current.signal;
@@ -34,6 +38,7 @@ export function useFilterOptions(
         if (!conf)
           throw new Error(`useFilterOptions: Unknown filter ${filterName}`);
 
+        // Call fetcher with structured parentValues
         const fetched = await conf.fetcher({ parentValues });
         if (!signal.aborted) setOptions(fetched);
       } catch (err) {
@@ -47,12 +52,7 @@ export function useFilterOptions(
       clearTimeout(timer);
       controllerRef.current?.abort();
     };
-  }, [
-    ...parentValues.map((v) => v?.id ?? -1),
-    ...extraDeps,
-    filterName,
-    debounceMs,
-  ]);
+  }, [filterName, debounceMs, parentValuesKey, extraDepsKey]);
 
   return { options, loading };
 }

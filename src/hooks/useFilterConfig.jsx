@@ -1,21 +1,38 @@
-import { fetchCity } from "../fetchers/cityFetcher";
-import { fetchContinent } from "../fetchers/continentFetcher";
-import { fetchCountry } from "../fetchers/countryFetcher";
-import { fetchDepartment } from "../fetchers/departmentFetcher";
-import { fetchEmployee } from "../fetchers/exmployeeFetcher";
-import { fetchRegion } from "../fetchers/regionFetcher";
-import { fetchStore } from "../fetchers/storeFetcher";
-import { fetchTeam } from "../fetchers/teamFetcher";
+import {
+  fetchContinent,
+  fetchCity,
+  fetchCountry,
+  fetchDepartment,
+  fetchEmployee,
+  fetchRegion,
+  fetchStore,
+  fetchTeam,
+} from "../fetchers/fetchers";
 import { ALL_OPTION } from "./useFilterConstants";
 
 /**
+ * Global option: whether child filters should reset when a parent filter changes.
+ * true  → child filters reset automatically
+ * false → child filters retain their current value if the value is a proper value for the parent selection
+ */
+export const resetDependencies = false;
+
+/**
  * Filter configuration: metadata only
+ * Fields:
  * - name: unique key
  * - label: UI label
  * - defaultValue: default selection
- * - dependsOn: all ancestor dependencies
- * - fetcher: function that fetches options based on parent values
+ * - dependsOn: parent filters this depends on
+ * - fetcher: fetcher function
+ * - isMulti: optional, multi-select
+ * - useBackend: whether to fetch from API (true) or use FAKE_* data (false)
+ *
+ * Switch from dev → prod:
+ * - Currently useBackend: false → development with FAKE_* data
+ * - Production: set useBackend: true or use process.env.NODE_ENV === "production"
  */
+
 export const filterConfig = [
   {
     name: "continent",
@@ -23,6 +40,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: [],
     fetcher: fetchContinent,
+    useBackend: false,
   },
   {
     name: "country",
@@ -30,6 +48,8 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent"],
     fetcher: fetchCountry,
+    isMulti: true,
+    useBackend: false,
   },
   {
     name: "region",
@@ -37,6 +57,8 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country"],
     fetcher: fetchRegion,
+    isMulti: true,
+    useBackend: false,
   },
   {
     name: "city",
@@ -44,6 +66,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region"],
     fetcher: fetchCity,
+    useBackend: false,
   },
   {
     name: "store",
@@ -51,6 +74,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city"],
     fetcher: fetchStore,
+    useBackend: false,
   },
   {
     name: "department",
@@ -58,6 +82,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city", "store"],
     fetcher: fetchDepartment,
+    useBackend: false,
   },
   {
     name: "team",
@@ -72,6 +97,7 @@ export const filterConfig = [
       "department",
     ],
     fetcher: fetchTeam,
+    useBackend: false,
   },
   {
     name: "employee",
@@ -87,5 +113,6 @@ export const filterConfig = [
       "team",
     ],
     fetcher: fetchEmployee,
+    useBackend: false,
   },
 ];
