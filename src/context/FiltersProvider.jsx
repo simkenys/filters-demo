@@ -29,6 +29,8 @@ function filtersReducer(state, action) {
       return { ...state, [action.key]: action.value };
     case "RESET":
       return buildDefaultState();
+    case "BATCH_SET":
+      return { ...state, ...action.updates };
     default:
       return state;
   }
@@ -40,9 +42,9 @@ export function FiltersProvider({ children }) {
     buildDefaultState()
   );
   const [searchParams, setSearchParams] = useSearchParams();
-
   const depsRef = useRef(new Map());
   const requestIdRef = useRef(new Map());
+  const isInitializedRef = useRef(false);
 
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
@@ -58,12 +60,100 @@ export function FiltersProvider({ children }) {
   };
 
   const setFilter = async (key, value) => {
-    const newParams = new URLSearchParams(searchParams);
     const requestId = Date.now() + Math.random();
 
-    dispatch({ type: "SET", key, value });
+    // Build next state with parent update
+    const nextState = { ...state, [key]: value };
+    const allUpdates = { [key]: value };
 
-    // Update URL params (ignore -1)
+    // Collect all dependent children
+    const toProcess = [];
+    const collectChildren = (parentKey) => {
+      for (const f of filterConfig) {
+        if (f.dependsOn?.includes(parentKey) && !toProcess.includes(f.name)) {
+          toProcess.push(f.name);
+          collectChildren(f.name);
+        }
+      }
+    };
+    collectChildren(key);
+
+    // Process each child and collect their updates
+    const childPromises = toProcess.map(async (childKey) => {
+      const f = filterConfig.find((fc) => fc.name === childKey);
+      if (!f) return null;
+
+      const currentValue = state[childKey];
+      const childRequestId = requestId;
+      requestIdRef.current.set(childKey, childRequestId);
+
+      // Calculate new parent values for child
+      const newParentValues = f.dependsOn.map((pKey) => {
+        const parentValue = nextState[pKey] || allUpdates[pKey] || state[pKey];
+        return Array.isArray(parentValue) ? parentValue : [parentValue];
+      });
+
+      const useBackend = f.useBackend ?? false;
+
+      try {
+        const newOptions = f.fetcher
+          ? await f.fetcher({ parentValues: newParentValues, useBackend })
+          : f.isMulti
+          ? [{ ...f.defaultValue }]
+          : { ...f.defaultValue };
+
+        if (requestIdRef.current.get(childKey) !== childRequestId) return null;
+
+        const validIds = new Set(
+          Array.isArray(newOptions)
+            ? newOptions.map((o) => o.id)
+            : [newOptions.id]
+        );
+
+        let newValue;
+
+        if (resetDependencies) {
+          // FULL RESET to default
+          newValue = f.isMulti
+            ? [{ ...f.defaultValue }]
+            : { ...f.defaultValue };
+        } else {
+          // Filter invalid selections
+          if (f.isMulti) {
+            const filteredValue = currentValue.filter(
+              (item) => item.id !== undefined && validIds.has(item.id)
+            );
+            newValue =
+              filteredValue.length > 0
+                ? filteredValue
+                : [{ ...f.defaultValue }];
+          } else {
+            newValue = validIds.has(currentValue.id)
+              ? currentValue
+              : { ...f.defaultValue };
+          }
+        }
+
+        // Store the update for batch processing
+        allUpdates[childKey] = newValue;
+        nextState[childKey] = newValue;
+
+        return { key: childKey, value: newValue };
+      } catch (err) {
+        console.error(`Error fetching dependent ${childKey}:`, err);
+        return null;
+      }
+    });
+
+    const childResults = await Promise.all(childPromises);
+
+    // Batch update all state changes at once
+    dispatch({ type: "BATCH_SET", updates: allUpdates });
+
+    // Now build URL params from the final state
+    const newParams = new URLSearchParams(searchParams);
+
+    // Update URL for parent
     if (Array.isArray(value)) {
       const realIds = value.filter((v) => v.id !== -1).map((v) => v.id);
       if (realIds.length > 0) newParams.set(key, realIds.join(","));
@@ -74,106 +164,28 @@ export function FiltersProvider({ children }) {
       newParams.delete(key);
     }
 
-    if (resetDependencies) {
-      // OLD BEHAVIOR: Reset dependent children recursively
-      const toReset = new Set();
+    // Update URL for all children
+    childResults.forEach((result) => {
+      if (!result) return;
 
-      const collectChildren = (parentKey) => {
-        for (const f of filterConfig) {
-          if (f.dependsOn?.includes(parentKey) && !toReset.has(f.name)) {
-            toReset.add(f.name);
-            collectChildren(f.name);
-          }
-        }
-      };
-      collectChildren(key);
+      const { key: childKey, value: childValue } = result;
 
-      toReset.forEach((childKey) => {
-        const f = filterConfig.find((fc) => fc.name === childKey);
-        if (!f) return;
+      if (Array.isArray(childValue)) {
+        const realIds = childValue.filter((v) => v.id !== -1).map((v) => v.id);
+        if (realIds.length > 0) newParams.set(childKey, realIds.join(","));
+        else newParams.delete(childKey);
+      } else if (
+        childValue &&
+        childValue.id !== undefined &&
+        childValue.id !== -1
+      ) {
+        newParams.set(childKey, childValue.id);
+      } else {
+        newParams.delete(childKey);
+      }
+    });
 
-        // ALWAYS reset to default, even if current value was valid
-        const resetValue = f.isMulti
-          ? [{ ...f.defaultValue }]
-          : { ...f.defaultValue };
-        dispatch({ type: "SET", key: f.name, value: resetValue });
-
-        // Remove from URL
-        newParams.delete(f.name);
-      });
-
-      // Update URL after all resets
-      setSearchParams(newParams);
-    } else {
-      // NEW BEHAVIOR: Filter dependent children to keep valid values
-      const nextState = { ...state, [key]: value };
-      const toFilter = [];
-      const collectChildren = (parentKey) => {
-        for (const f of filterConfig) {
-          if (f.dependsOn?.includes(parentKey) && !toFilter.includes(f.name)) {
-            toFilter.push(f.name);
-            collectChildren(f.name);
-          }
-        }
-      };
-      collectChildren(key);
-
-      const filterPromises = toFilter.map(async (childKey) => {
-        const f = filterConfig.find((fc) => fc.name === childKey);
-        if (!f || !f.fetcher) return;
-
-        requestIdRef.current.set(childKey, requestId);
-        const currentValue = state[childKey];
-
-        const newParentValues = f.dependsOn.map((pKey) => {
-          const parentValue = nextState[pKey];
-          return Array.isArray(parentValue) ? parentValue : [parentValue];
-        });
-
-        const useBackend = f.useBackend ?? false;
-
-        try {
-          const newOptions = await f.fetcher({
-            parentValues: newParentValues,
-            useBackend,
-          });
-
-          if (requestIdRef.current.get(childKey) !== requestId) return;
-
-          const validIds = new Set(newOptions.map((o) => o.id));
-
-          if (f.isMulti) {
-            // --- FIXED: keep all if nothing matches ---
-            const filteredValue = currentValue.filter((item) =>
-              validIds.has(item.id)
-            );
-            const newValue =
-              filteredValue.length > 0
-                ? filteredValue
-                : [{ ...f.defaultValue }];
-
-            dispatch({ type: "SET", key: f.name, value: newValue });
-
-            const realIds = newValue
-              .filter((v) => v.id !== -1)
-              .map((v) => v.id);
-            if (realIds.length > 0) newParams.set(f.name, realIds.join(","));
-            else newParams.delete(f.name);
-          } else {
-            if (!currentValue || !validIds.has(currentValue.id)) {
-              const resetValue = { ...f.defaultValue };
-              dispatch({ type: "SET", key: f.name, value: resetValue });
-              newParams.delete(f.name);
-            }
-          }
-        } catch (error) {
-          console.error(`Error filtering dependent ${f.name}:`, error);
-        }
-      });
-
-      await Promise.all(filterPromises);
-      setSearchParams(newParams);
-    }
+    setSearchParams(newParams);
   };
 
   const reset = () => {
@@ -181,34 +193,68 @@ export function FiltersProvider({ children }) {
     setSearchParams({});
   };
 
-  // Initialize from URL
+  // Initialize filters from URL only once on mount
   useEffect(() => {
-    filterConfig.forEach((f) => {
+    if (isInitializedRef.current) return;
+
+    const hasParams = Array.from(searchParams.keys()).some((key) =>
+      filterConfig.some((f) => f.name === key)
+    );
+
+    if (!hasParams) {
+      isInitializedRef.current = true;
+      return;
+    }
+
+    const initPromises = filterConfig.map(async (f) => {
       const raw = searchParams.get(f.name);
-      if (!raw) return;
+      if (!raw || !f.fetcher) return null;
+
       const useBackend = f.useBackend ?? false;
-      if (f.fetcher) {
-        const parentValues = getParentValues(f);
+      const parentValues = getParentValues(f);
+
+      try {
+        const options = await f.fetcher({ parentValues, useBackend });
+
         if (f.isMulti) {
           const ids = raw.split(",").map((s) => parseInt(s, 10));
-          f.fetcher({ parentValues, useBackend }).then((options) => {
-            const matches = options.filter((o) => ids.includes(o.id));
-            dispatch({ type: "SET", key: f.name, value: matches });
-          });
+          const matches = options.filter((o) => ids.includes(o.id));
+          if (matches.length > 0) {
+            return { key: f.name, value: matches };
+          }
         } else {
           const id = parseInt(raw, 10);
-          f.fetcher({ parentValues, useBackend }).then((options) => {
-            const match = options.find((o) => o.id === id);
-            if (match) dispatch({ type: "SET", key: f.name, value: match });
-          });
+          const match = options.find((o) => o.id === id);
+          if (match) {
+            return { key: f.name, value: match };
+          }
         }
+      } catch (err) {
+        console.error(`Error initializing ${f.name}:`, err);
       }
+
+      return null;
     });
-  }, [searchParams]);
+
+    Promise.all(initPromises).then((results) => {
+      const updates = {};
+      results.forEach((result) => {
+        if (result) {
+          updates[result.key] = result.value;
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        dispatch({ type: "BATCH_SET", updates });
+      }
+
+      isInitializedRef.current = true;
+    });
+  }, []); // Only run once on mount
 
   const value = useMemo(
     () => ({ state, set: setFilter, reset, registerDeps }),
-    [state, searchParams]
+    [state]
   );
 
   return (
