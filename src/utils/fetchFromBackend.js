@@ -1,6 +1,5 @@
-/**
- * Generic backend fetcher
- */
+////////////////////////////
+// GET VERSION
 import { ALL_OPTION } from "../hooks/useFilterConstants";
 
 export async function fetchFromBackend({
@@ -8,21 +7,29 @@ export async function fetchFromBackend({
   filterProps,
   endpoint,
 }) {
+  // Flatten parent selections and filter out -1 (All)
   const flatParents = parentValues
     .map((level, idx) =>
-      level.map((p) => ({ ...p, key: filterProps.dependsOn[idx] }))
+      level
+        .filter((p) => p.id !== -1) // Remove -1
+        .map((p) => ({ ...p, key: filterProps.dependsOn[idx] }))
     )
     .flat();
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ parents: flatParents }),
+  const params = new URLSearchParams();
+
+  // Multi-value support for multi-select parents
+  flatParents.forEach((p) => {
+    if (p.id !== undefined) {
+      params.append(`${p.key}Id`, p.id);
+    }
   });
 
-  if (!res.ok) throw new Error(`Failed to fetch from ${endpoint}`);
+  const url = `${endpoint}?${params.toString()}`;
+  const res = await fetch(url);
+
+  if (!res.ok) throw new Error(`Failed to fetch from ${url}`);
   const data = await res.json();
 
-  // Always include ALL_OPTION
   return [ALL_OPTION, ...data];
 }

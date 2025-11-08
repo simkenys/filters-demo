@@ -28,10 +28,28 @@
   - Compatible with:
     - Fake fetchers for development
     - SWR or custom API fetchers for production
-  - Fetchers are configured in fetchers.js (In useFilterConfig.jsx, you can put useBackend: true on each filter to use the API version. You have to configure the api, the routes don't exist, only sample code exists on how to trigger them)
+  - Fetchers are configured in fetchers.js (In useFilterConfig.jsx, you can put useBackend: true on each filter to use the API version. False will use local FAKE data)
 
 - **Router Integration**
   - DashboardExample is wrapped in BrowserRouter to enable URL syncing via useSearchParams.
+
+## Start Local JSON Server (when useBackend: true in your filterConfig)
+
+1. Make sure dependencies are installed (json-server cors):
+
+```
+npm install
+```
+
+2. Start the local API server:
+
+```
+npm run api:dev
+```
+
+3. The API will be available at: `http://localhost:4000`
+
+The server uses `db.json` as the data source. You can edit `db.json` to change or add data, and `server.js` is the entry point that configures `json-server` and any custom routes/middleware (inclusive CORS).
 
 **Next Todos**
 
