@@ -30,6 +30,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent"],
     fetcher: fetchCountry,
+    isMulti: true,
   },
   {
     name: "region",
@@ -37,6 +38,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country"],
     fetcher: fetchRegion,
+    isMulti: true,
   },
   {
     name: "city",

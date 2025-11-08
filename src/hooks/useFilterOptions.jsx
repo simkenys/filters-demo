@@ -21,8 +21,14 @@ export function useFilterOptions(
   const [loading, setLoading] = useState(false);
   const controllerRef = useRef(null);
 
+  // --- Flatten parentValues for multi-select and stable IDs
+  const parentIdsString = parentValues
+    .flat()
+    .map((v) => v.id ?? -1)
+    .sort((a, b) => a - b)
+    .join(",");
+
   useEffect(() => {
-    // Abort previous request if parentValues change
     if (controllerRef.current) controllerRef.current.abort();
     controllerRef.current = new AbortController();
     const signal = controllerRef.current.signal;
@@ -47,12 +53,7 @@ export function useFilterOptions(
       clearTimeout(timer);
       controllerRef.current?.abort();
     };
-  }, [
-    ...parentValues.map((v) => v?.id ?? -1),
-    ...extraDeps,
-    filterName,
-    debounceMs,
-  ]);
+  }, [parentIdsString, ...extraDeps, filterName, debounceMs]);
 
   return { options, loading };
 }

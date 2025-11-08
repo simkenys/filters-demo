@@ -5,6 +5,7 @@ import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
 import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
+import FilterMultiSelect from "../components/filters/FilterMultiSelect";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -41,7 +42,8 @@ function DashboardInner() {
       <Box display="flex" gap={2} flexWrap="wrap">
         {filterConfig.map((f) => (
           <Box key={f.name} width={250}>
-            <FilterSelect name={f.name} />
+            {!f?.isMulti && <FilterSelect name={f.name} />}
+            {f?.isMulti && <FilterMultiSelect name={f.name} />}
           </Box>
         ))}
       </Box>

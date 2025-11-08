@@ -1,14 +1,29 @@
 import { ALL_OPTION } from "../hooks/useFilterConstants";
 import { FAKE_REGIONS } from "../data/fakeData";
 
-// Dev / fake fetcher
+// Dev / fake fetcher with multi-select parent support
 export async function fetchRegion({ parentValues }) {
-  const [continent, country] = parentValues;
+  const flatParents = parentValues.flat();
+
+  const continentParents = flatParents.filter(
+    (p) => p.continentId === undefined
+  );
+  const countryParents = flatParents.filter(
+    (p) => p.countryId !== undefined && p.regionId === undefined
+  );
+
   let filtered = FAKE_REGIONS;
-  if (continent && continent.id !== -1)
-    filtered = filtered.filter((r) => r.continentId === continent.id);
-  if (country && country.id !== -1)
-    filtered = filtered.filter((r) => r.countryId === country.id);
+
+  if (continentParents.length && !continentParents.some((c) => c.id === -1)) {
+    const continentIds = continentParents.map((c) => c.id);
+    filtered = filtered.filter((r) => continentIds.includes(r.continentId));
+  }
+
+  if (countryParents.length && !countryParents.some((c) => c.id === -1)) {
+    const countryIds = countryParents.map((c) => c.id);
+    filtered = filtered.filter((r) => countryIds.includes(r.countryId));
+  }
+
   return [ALL_OPTION, ...filtered];
 }
 
@@ -18,10 +33,18 @@ import useSWR from "swr";
 const swrFetcher = (url) => fetch(url).then(res => res.json());
 
 export function useRegionOptions(parentValues) {
-  const [continent, country] = parentValues;
-  const continentId = continent?.id !== -1 ? continent.id : "";
-  const countryId = country?.id !== -1 ? country.id : "";
-  const url = `/api/regions?continentId=${continentId}&countryId=${countryId}`;
+  const flatParents = parentValues.flat();
+  const continentParents = flatParents.filter((p) => p.continentId === undefined);
+  const countryParents = flatParents.filter((p) => p.countryId !== undefined && p.regionId === undefined);
+
+  const continentIds = continentParents.filter(c => c.id !== -1).map(c => c.id).join(",");
+  const countryIds = countryParents.filter(c => c.id !== -1).map(c => c.id).join(",");
+
+  const params = [];
+  if (continentIds) params.push(`continentId=${continentIds}`);
+  if (countryIds) params.push(`countryId=${countryIds}`);
+  const url = `/api/regions${params.length ? `?${params.join("&")}` : ""}`;
+
   const { data, error, isLoading } = useSWR(url, swrFetcher, { revalidateOnFocus: false });
   return {
     options: data ? [ALL_OPTION, ...data] : [ALL_OPTION],

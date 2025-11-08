@@ -3,18 +3,48 @@ import { FAKE_DEPARTMENTS } from "../data/fakeData";
 
 // Dev / fake fetcher
 export async function fetchDepartment({ parentValues }) {
-  const [continent, country, region, city, store] = parentValues;
+  const flatParents = parentValues.flat();
+  const continentParents = flatParents.filter(
+    (p) => p.continentId === undefined
+  );
+  const countryParents = flatParents.filter(
+    (p) => p.countryId !== undefined && p.regionId === undefined
+  );
+  const regionParents = flatParents.filter(
+    (p) => p.regionId !== undefined && p.cityId === undefined
+  );
+  const cityParents = flatParents.filter(
+    (p) => p.cityId !== undefined && p.storeId === undefined
+  );
+  const storeParents = flatParents.filter((p) => p.storeId !== undefined);
+
   let filtered = FAKE_DEPARTMENTS;
-  if (continent && continent.id !== -1)
-    filtered = filtered.filter((d) => d.continentId === continent.id);
-  if (country && country.id !== -1)
-    filtered = filtered.filter((d) => d.countryId === country.id);
-  if (region && region.id !== -1)
-    filtered = filtered.filter((d) => d.regionId === region.id);
-  if (city && city.id !== -1)
-    filtered = filtered.filter((d) => d.cityId === city.id);
-  if (store && store.id !== -1)
-    filtered = filtered.filter((d) => d.storeId === store.id);
+
+  if (continentParents.length && !continentParents.some((c) => c.id === -1)) {
+    const continentIds = continentParents.map((c) => c.id);
+    filtered = filtered.filter((d) => continentIds.includes(d.continentId));
+  }
+
+  if (countryParents.length && !countryParents.some((c) => c.id === -1)) {
+    const countryIds = countryParents.map((c) => c.id);
+    filtered = filtered.filter((d) => countryIds.includes(d.countryId));
+  }
+
+  if (regionParents.length && !regionParents.some((r) => r.id === -1)) {
+    const regionIds = regionParents.map((r) => r.id);
+    filtered = filtered.filter((d) => regionIds.includes(d.regionId));
+  }
+
+  if (cityParents.length && !cityParents.some((c) => c.id === -1)) {
+    const cityIds = cityParents.map((c) => c.id);
+    filtered = filtered.filter((d) => cityIds.includes(d.cityId));
+  }
+
+  if (storeParents.length && !storeParents.some((s) => s.id === -1)) {
+    const storeIds = storeParents.map((s) => s.id);
+    filtered = filtered.filter((d) => storeIds.includes(d.storeId));
+  }
+
   return [ALL_OPTION, ...filtered];
 }
 
@@ -24,13 +54,27 @@ import useSWR from "swr";
 const swrFetcher = (url) => fetch(url).then(res => res.json());
 
 export function useDepartmentOptions(parentValues) {
-  const [continent, country, region, city, store] = parentValues;
-  const continentId = continent?.id !== -1 ? continent.id : "";
-  const countryId = country?.id !== -1 ? country.id : "";
-  const regionId = region?.id !== -1 ? region.id : "";
-  const cityId = city?.id !== -1 ? city.id : "";
-  const storeId = store?.id !== -1 ? store.id : "";
-  const url = `/api/departments?continentId=${continentId}&countryId=${countryId}&regionId=${regionId}&cityId=${cityId}&storeId=${storeId}`;
+  const flatParents = parentValues.flat();
+  const continentParents = flatParents.filter(p => p.continentId === undefined);
+  const countryParents = flatParents.filter(p => p.countryId !== undefined && p.regionId === undefined);
+  const regionParents = flatParents.filter(p => p.regionId !== undefined && p.cityId === undefined);
+  const cityParents = flatParents.filter(p => p.cityId !== undefined && p.storeId === undefined);
+  const storeParents = flatParents.filter(p => p.storeId !== undefined);
+
+  const continentIds = continentParents.filter(c => c.id !== -1).map(c => c.id).join(",");
+  const countryIds = countryParents.filter(c => c.id !== -1).map(c => c.id).join(",");
+  const regionIds = regionParents.filter(r => r.id !== -1).map(r => r.id).join(",");
+  const cityIds = cityParents.filter(c => c.id !== -1).map(c => c.id).join(",");
+  const storeIds = storeParents.filter(s => s.id !== -1).map(s => s.id).join(",");
+
+  const params = [];
+  if (continentIds) params.push(`continentId=${continentIds}`);
+  if (countryIds) params.push(`countryId=${countryIds}`);
+  if (regionIds) params.push(`regionId=${regionIds}`);
+  if (cityIds) params.push(`cityId=${cityIds}`);
+  if (storeIds) params.push(`storeId=${storeIds}`);
+  const url = `/api/departments${params.length ? `?${params.join("&")}` : ""}`;
+
   const { data, error, isLoading } = useSWR(url, swrFetcher, { revalidateOnFocus: false });
   return {
     options: data ? [ALL_OPTION, ...data] : [ALL_OPTION],

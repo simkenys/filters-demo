@@ -1,11 +1,21 @@
-// src/components/filters/ActiveFiltersBar.js
 import { Box, Typography, Chip, IconButton } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
 import { useFilters } from "../../context/FiltersProvider";
 
 export default function ActiveFiltersBar() {
   const { state, reset } = useFilters();
-  const active = Object.entries(state).filter(([, v]) => v?.id !== -1);
+
+  // Flatten active filters, handle multi-select arrays
+  const active = Object.entries(state).flatMap(([k, v]) => {
+    if (Array.isArray(v)) {
+      // Only include selected items, ignore ALL_OPTION (id: -1)
+      const validItems = v.filter((item) => item.id !== -1);
+      return validItems.map((item) => ({ key: k, value: item }));
+    } else if (v?.id !== -1) {
+      return [{ key: k, value: v }];
+    }
+    return [];
+  });
 
   if (!active.length) {
     return (
@@ -22,8 +32,12 @@ export default function ActiveFiltersBar() {
       <Typography variant="body2" fontWeight="medium">
         Active Filters:
       </Typography>
-      {active.map(([k, v]) => (
-        <Chip key={k} label={`${k}: ${v.label} (ID: ${v.id})`} size="small" />
+      {active.map(({ key, value }) => (
+        <Chip
+          key={`${key}-${value.id}`}
+          label={`${key}: ${value.label} (ID: ${value.id})`}
+          size="small"
+        />
       ))}
       <IconButton onClick={reset} size="small" title="Reset all to 'All'">
         <ClearIcon fontSize="small" />

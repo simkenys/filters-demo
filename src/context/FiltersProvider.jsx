@@ -1,17 +1,11 @@
-import React, {
-  createContext,
-  useContext,
-  useReducer,
-  useMemo,
-  useEffect,
-} from "react";
+import React, { createContext, useContext, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { filterConfig } from "../hooks/useFilterConfig";
 
 function buildDefaultState() {
   const state = {};
   filterConfig.forEach((f) => {
-    state[f.name] = f.defaultValue;
+    state[f.name] = f.isMulti ? [f.defaultValue] : f.defaultValue;
   });
   return state;
 }
@@ -35,7 +29,10 @@ function filtersReducer(state, action) {
 }
 
 export function FiltersProvider({ children }) {
-  const [state, dispatch] = useReducer(filtersReducer, buildDefaultState());
+  const [state, dispatch] = React.useReducer(
+    filtersReducer,
+    buildDefaultState()
+  );
   const depsRef = React.useRef(new Map());
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -47,7 +44,13 @@ export function FiltersProvider({ children }) {
   const setFilter = (key, value) => {
     dispatch({ type: "SET", key, value });
     const newParams = new URLSearchParams(searchParams);
-    newParams.set(key, value.id);
+    if (Array.isArray(value)) {
+      newParams.set(key, value.map((v) => v.id).join(","));
+    } else if (value && value.id !== undefined) {
+      newParams.set(key, value.id);
+    } else {
+      newParams.delete(key);
+    }
     setSearchParams(newParams);
   };
 
@@ -56,12 +59,21 @@ export function FiltersProvider({ children }) {
     setSearchParams({});
   };
 
-  // Initialize from URL
   useEffect(() => {
     for (const f of filterConfig) {
-      const idStr = searchParams.get(f.name);
-      if (idStr) {
-        const id = parseInt(idStr, 10);
+      const raw = searchParams.get(f.name);
+      if (!raw) continue;
+
+      if (f.isMulti) {
+        const ids = raw.split(",").map((s) => parseInt(s, 10));
+        if (f.fetcher) {
+          f.fetcher({ parentValues: [] }).then((options) => {
+            const matches = options.filter((o) => ids.includes(o.id));
+            dispatch({ type: "SET", key: f.name, value: matches });
+          });
+        }
+      } else {
+        const id = parseInt(raw, 10);
         if (f.fetcher) {
           f.fetcher({ parentValues: [] }).then((options) => {
             const match = options.find((o) => o.id === id);
