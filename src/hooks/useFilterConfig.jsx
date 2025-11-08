@@ -15,7 +15,7 @@ import { ALL_OPTION } from "./useFilterConstants";
  * true  → child filters reset automatically
  * false → child filters retain their current value if the value is a proper value for the parent selection
  */
-export const resetDependencies = false;
+export const resetDependencies = true;
 
 /**
  * Filter configuration: metadata only
@@ -40,7 +40,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: [],
     fetcher: fetchContinent,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "country",
@@ -49,7 +49,7 @@ export const filterConfig = [
     dependsOn: ["continent"],
     fetcher: fetchCountry,
     isMulti: true,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "region",
@@ -58,7 +58,7 @@ export const filterConfig = [
     dependsOn: ["continent", "country"],
     fetcher: fetchRegion,
     isMulti: true,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "city",
@@ -66,7 +66,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region"],
     fetcher: fetchCity,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "store",
@@ -74,7 +74,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city"],
     fetcher: fetchStore,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "department",
@@ -82,7 +82,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city", "store"],
     fetcher: fetchDepartment,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "team",
@@ -97,7 +97,7 @@ export const filterConfig = [
       "department",
     ],
     fetcher: fetchTeam,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "employee",
@@ -113,6 +113,6 @@ export const filterConfig = [
       "team",
     ],
     fetcher: fetchEmployee,
-    useBackend: false,
+    useBackend: true,
   },
 ];

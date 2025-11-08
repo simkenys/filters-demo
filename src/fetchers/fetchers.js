@@ -12,41 +12,53 @@ import { createFetcher } from "../utils/createFetcher";
 
 /**
  * Fetchers for each filter.
- * - FAKE_* data is used for development/testing
+ * - FAKE_* data is used for development/testing, you can just provide an empty array [] instead of the FAKE_* dataset in a real API situation
  * - Production endpoints are used when useBackend: true (comes from useFilterConfig.jsx)
  */
 export const fetchContinent = createFetcher(
   "continent",
   FAKE_CONTINENTS,
-  "/api/continents"
+  "http://localhost:4000/continents"
 );
 
 export const fetchCountry = createFetcher(
   "country",
   FAKE_COUNTRIES,
-  "/api/countries"
+  "http://localhost:4000/countries"
 );
 
 export const fetchRegion = createFetcher(
   "region",
   FAKE_REGIONS,
-  "/api/regions"
+  "http://localhost:4000/regions"
 );
 
-export const fetchCity = createFetcher("city", FAKE_CITIES, "/api/cities");
+export const fetchCity = createFetcher(
+  "city",
+  FAKE_CITIES,
+  "http://localhost:4000/cities"
+);
 
-export const fetchStore = createFetcher("store", FAKE_STORES, "/api/stores");
+export const fetchStore = createFetcher(
+  "store",
+  FAKE_STORES,
+  "http://localhost:4000/stores"
+);
 
 export const fetchDepartment = createFetcher(
   "department",
   FAKE_DEPARTMENTS,
-  "/api/departments"
+  "http://localhost:4000/departments"
 );
 
-export const fetchTeam = createFetcher("team", FAKE_TEAMS, "/api/teams");
+export const fetchTeam = createFetcher(
+  "team",
+  FAKE_TEAMS,
+  "http://localhost:4000/teams"
+);
 
 export const fetchEmployee = createFetcher(
   "employee",
   FAKE_EMPLOYEES,
-  "/api/employees"
+  "http://localhost:4000/employees"
 );
