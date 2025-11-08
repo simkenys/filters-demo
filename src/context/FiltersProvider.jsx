@@ -143,18 +143,10 @@ export function FiltersProvider({ children }) {
           const validIds = new Set(newOptions.map((o) => o.id));
 
           if (f.isMulti) {
-            console.log("Filtering", f.name);
-            console.log("currentValue:", currentValue);
-            console.log("newOptions:", newOptions);
-            console.log("validIds:", Array.from(validIds));
-
             const filteredValue = currentValue.filter((item) => {
               const isValid = item.id !== undefined && validIds.has(item.id);
-              console.log(`Item ${item.label} (id: ${item.id}): ${isValid}`);
               return isValid;
             });
-
-            console.log("filteredValue:", filteredValue);
 
             const newValue =
               filteredValue.length > 0

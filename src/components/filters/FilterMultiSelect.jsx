@@ -102,23 +102,29 @@ export default function FilterMultiSelect({
     let newValues = options.filter((opt) => selectedIds.includes(opt.id));
 
     const hasAll = newValues.some((v) => v.id === -1);
-    const hadAll = selectedIds.length > newValues.length; // More IDs selected means All is being removed
+    const hadAll = selectedValues.some((v) => v.id === -1);
 
-    if (hasAll && selectedIds.length === 1) {
-      // ONLY All is selected
+    // Check if "All" was just clicked (it's now in the selection but wasn't before)
+    const allJustClicked = hasAll && !hadAll;
+
+    if (allJustClicked) {
+      // "All" was just clicked - deselect everything else and select only "All"
       newValues = Array.isArray(conf.defaultValue)
         ? conf.defaultValue
         : [conf.defaultValue];
-    } else {
-      // Remove All-option if other options are also selected
+    } else if (hasAll && selectedIds.length > 1) {
+      // "All" is selected along with other options - remove "All"
       newValues = newValues.filter((v) => v.id !== -1);
-
-      // If nothing selected, fallback to defaultValue
-      if (newValues.length === 0) {
-        newValues = Array.isArray(conf.defaultValue)
-          ? conf.defaultValue
-          : [conf.defaultValue];
-      }
+    } else if (hasAll && selectedIds.length === 1) {
+      // ONLY "All" is selected - keep it
+      newValues = Array.isArray(conf.defaultValue)
+        ? conf.defaultValue
+        : [conf.defaultValue];
+    } else if (newValues.length === 0) {
+      // Nothing selected - fallback to "All"
+      newValues = Array.isArray(conf.defaultValue)
+        ? conf.defaultValue
+        : [conf.defaultValue];
     }
 
     // Update filter state
