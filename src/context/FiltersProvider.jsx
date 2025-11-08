@@ -43,6 +43,9 @@ export function FiltersProvider({ children }) {
 
   const depsRef = useRef(new Map());
 
+  // Track latest request ID for each filter to prevent race conditions
+  const requestIdRef = useRef(new Map());
+
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
     depsRef.current.set(key, dependsOn);
@@ -62,12 +65,25 @@ export function FiltersProvider({ children }) {
   const setFilter = async (key, value) => {
     const newParams = new URLSearchParams(searchParams);
 
+    // Generate a unique request ID for this setFilter call
+    const requestId = Date.now() + Math.random();
+
     // Update parent filter value
     dispatch({ type: "SET", key, value });
-    if (Array.isArray(value))
-      newParams.set(key, value.map((v) => v.id).join(","));
-    else if (value && value.id !== undefined) newParams.set(key, value.id);
-    else newParams.delete(key);
+
+    // Update URL params, but never include -1 (default/All)
+    if (Array.isArray(value)) {
+      const realIds = value.filter((v) => v.id !== -1).map((v) => v.id);
+      if (realIds.length > 0) {
+        newParams.set(key, realIds.join(","));
+      } else {
+        newParams.delete(key);
+      }
+    } else if (value && value.id !== undefined && value.id !== -1) {
+      newParams.set(key, value.id);
+    } else {
+      newParams.delete(key);
+    }
 
     // Handle dependent children based on resetDependencies flag
     if (resetDependencies) {
@@ -124,6 +140,9 @@ export function FiltersProvider({ children }) {
         const f = filterConfig.find((fc) => fc.name === childKey);
         if (!f || !f.fetcher) return;
 
+        // Store this request ID as the latest for this child filter
+        requestIdRef.current.set(childKey, requestId);
+
         const currentValue = state[childKey];
 
         // Calculate new parent values using nextState
@@ -140,13 +159,28 @@ export function FiltersProvider({ children }) {
             parentValues: newParentValues,
             useBackend,
           });
+
+          // CHECK: Is this still the latest request for this filter?
+          if (requestIdRef.current.get(childKey) !== requestId) {
+            console.log(`Ignoring stale response for ${childKey}`);
+            return; // Ignore this response, a newer one is in progress or completed
+          }
+
           const validIds = new Set(newOptions.map((o) => o.id));
 
           if (f.isMulti) {
+            console.log("Filtering", f.name);
+            console.log("currentValue:", currentValue);
+            console.log("newOptions:", newOptions);
+            console.log("validIds:", Array.from(validIds));
+
             const filteredValue = currentValue.filter((item) => {
               const isValid = item.id !== undefined && validIds.has(item.id);
+              console.log(`Item ${item.label} (id: ${item.id}): ${isValid}`);
               return isValid;
             });
+
+            console.log("filteredValue:", filteredValue);
 
             const newValue =
               filteredValue.length > 0
@@ -155,10 +189,14 @@ export function FiltersProvider({ children }) {
 
             dispatch({ type: "SET", key: f.name, value: newValue });
 
-            if (newValue.length === 1 && newValue[0].id === undefined) {
-              newParams.delete(f.name);
+            // Never add -1 (default/All) to URL
+            const realIds = newValue
+              .filter((v) => v.id !== -1)
+              .map((v) => v.id);
+            if (realIds.length > 0) {
+              newParams.set(f.name, realIds.join(","));
             } else {
-              newParams.set(f.name, newValue.map((v) => v.id).join(","));
+              newParams.delete(f.name);
             }
           } else {
             // For single select, check if current value is still valid

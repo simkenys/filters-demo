@@ -77,7 +77,7 @@ export default function FilterMultiSelect({
         set(name, fallback);
 
         const newParams = new URLSearchParams(searchParams);
-        newParams.delete(name); // Remove All-option id from URL
+        newParams.delete(name); // Remove from URL (default should not be in URL)
         setSearchParams(newParams);
       }
     }, debounceMs);

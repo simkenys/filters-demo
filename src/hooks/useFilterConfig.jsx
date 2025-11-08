@@ -13,7 +13,7 @@ import { ALL_OPTION } from "./useFilterConstants";
 /**
  * Global option: whether child filters should reset when a parent filter changes.
  * true  → child filters reset automatically
- * false → child filters retain their current value
+ * false → child filters retain their current value if the value is a proper value for the parent selection
  */
 export const resetDependencies = false;
 
