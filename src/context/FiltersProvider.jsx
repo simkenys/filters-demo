@@ -1,11 +1,17 @@
-import React, { createContext, useContext, useMemo, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import { useSearchParams } from "react-router-dom";
-import { filterConfig } from "../hooks/useFilterConfig";
+import { filterConfig, resetDependencies } from "../hooks/useFilterConfig";
 
 function buildDefaultState() {
   const state = {};
   filterConfig.forEach((f) => {
-    state[f.name] = f.isMulti ? [f.defaultValue] : f.defaultValue;
+    state[f.name] = f.isMulti ? [{ ...f.defaultValue }] : { ...f.defaultValue };
   });
   return state;
 }
@@ -33,24 +39,60 @@ export function FiltersProvider({ children }) {
     filtersReducer,
     buildDefaultState()
   );
-  const depsRef = React.useRef(new Map());
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const depsRef = useRef(new Map());
 
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
     depsRef.current.set(key, dependsOn);
   };
 
+  // Compute parentValues for a filter
+  const getParentValues = (filter) => {
+    if (!filter.dependsOn || filter.dependsOn.length === 0) return [];
+    return filter.dependsOn.map((pKey) => state[pKey]).flat();
+  };
+
   const setFilter = (key, value) => {
-    dispatch({ type: "SET", key, value });
     const newParams = new URLSearchParams(searchParams);
-    if (Array.isArray(value)) {
+
+    // Update parent filter value
+    dispatch({ type: "SET", key, value });
+    if (Array.isArray(value))
       newParams.set(key, value.map((v) => v.id).join(","));
-    } else if (value && value.id !== undefined) {
-      newParams.set(key, value.id);
-    } else {
-      newParams.delete(key);
+    else if (value && value.id !== undefined) newParams.set(key, value.id);
+    else newParams.delete(key);
+
+    // Reset dependent children recursively
+    if (resetDependencies) {
+      const toReset = new Set();
+
+      const collectChildren = (parentKey) => {
+        for (const f of filterConfig) {
+          if (f.dependsOn?.includes(parentKey) && !toReset.has(f.name)) {
+            toReset.add(f.name);
+            collectChildren(f.name);
+          }
+        }
+      };
+      collectChildren(key);
+
+      toReset.forEach((childKey) => {
+        const f = filterConfig.find((fc) => fc.name === childKey);
+        if (!f) return;
+
+        const resetValue = f.isMulti
+          ? [{ ...f.defaultValue }]
+          : { ...f.defaultValue };
+        dispatch({ type: "SET", key: f.name, value: resetValue });
+
+        // Remove from URL
+        newParams.delete(f.name);
+      });
     }
+
+    // Finally, update URL after all resets
     setSearchParams(newParams);
   };
 
@@ -59,30 +101,32 @@ export function FiltersProvider({ children }) {
     setSearchParams({});
   };
 
+  // Initialize filters from URL
   useEffect(() => {
-    for (const f of filterConfig) {
+    filterConfig.forEach((f) => {
       const raw = searchParams.get(f.name);
-      if (!raw) continue;
+      if (!raw) return;
 
-      if (f.isMulti) {
-        const ids = raw.split(",").map((s) => parseInt(s, 10));
-        if (f.fetcher) {
-          f.fetcher({ parentValues: [] }).then((options) => {
+      const useBackend = f.useBackend ?? false;
+
+      if (f.fetcher) {
+        const parentValues = getParentValues(f);
+        if (f.isMulti) {
+          const ids = raw.split(",").map((s) => parseInt(s, 10));
+          f.fetcher({ parentValues, useBackend }).then((options) => {
             const matches = options.filter((o) => ids.includes(o.id));
             dispatch({ type: "SET", key: f.name, value: matches });
           });
-        }
-      } else {
-        const id = parseInt(raw, 10);
-        if (f.fetcher) {
-          f.fetcher({ parentValues: [] }).then((options) => {
+        } else {
+          const id = parseInt(raw, 10);
+          f.fetcher({ parentValues, useBackend }).then((options) => {
             const match = options.find((o) => o.id === id);
             if (match) dispatch({ type: "SET", key: f.name, value: match });
           });
         }
       }
-    }
-  }, []);
+    });
+  }, [searchParams]);
 
   const value = useMemo(
     () => ({ state, set: setFilter, reset, registerDeps }),

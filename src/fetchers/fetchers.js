@@ -1,169 +1,52 @@
-import { ALL_OPTION } from "../hooks/useFilterConstants";
-import { filterConfig } from "../hooks/useFilterConfig";
-import { fetchFromBackend } from "../utils/fetchFromBackend";
-import { flattenWithDependsOn } from "../utils/util";
-// Fake data imports
 import {
+  FAKE_CITIES,
   FAKE_CONTINENTS,
   FAKE_COUNTRIES,
-  FAKE_REGIONS,
-  FAKE_CITIES,
-  FAKE_STORES,
   FAKE_DEPARTMENTS,
-  FAKE_TEAMS,
   FAKE_EMPLOYEES,
+  FAKE_REGIONS,
+  FAKE_STORES,
+  FAKE_TEAMS,
 } from "../data/fakeData";
+import { createFetcher } from "../utils/createFetcher";
 
-// Helper for local filtering
-function filterFakeData(data, flatParents) {
-  let filtered = data;
-  const grouped = flatParents.reduce((acc, p) => {
-    if (!acc[p.key]) acc[p.key] = [];
-    acc[p.key].push(p);
-    return acc;
-  }, {});
+/**
+ * Fetchers for each filter.
+ * - FAKE_* data is used for development/testing
+ * - Production endpoints are used when useBackend: true (comes from useFilterConfig.jsx)
+ */
+export const fetchContinent = createFetcher(
+  "continent",
+  FAKE_CONTINENTS,
+  "/api/continents"
+);
 
-  Object.entries(grouped).forEach(([key, parents]) => {
-    if (parents.some((p) => p.id === -1)) return;
-    const ids = parents.map((p) => p.id);
-    filtered = filtered.filter((item) => ids.includes(item[`${key}Id`]));
-  });
+export const fetchCountry = createFetcher(
+  "country",
+  FAKE_COUNTRIES,
+  "/api/countries"
+);
 
-  return [ALL_OPTION, ...filtered];
-}
+export const fetchRegion = createFetcher(
+  "region",
+  FAKE_REGIONS,
+  "/api/regions"
+);
 
-// CONTINENT
-export async function fetchContinent({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "continent");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/continents",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_CONTINENTS,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
+export const fetchCity = createFetcher("city", FAKE_CITIES, "/api/cities");
 
-// COUNTRY
-export async function fetchCountry({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "country");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/countries",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_COUNTRIES,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
+export const fetchStore = createFetcher("store", FAKE_STORES, "/api/stores");
 
-// REGION
-export async function fetchRegion({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "region");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/regions",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_REGIONS,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
+export const fetchDepartment = createFetcher(
+  "department",
+  FAKE_DEPARTMENTS,
+  "/api/departments"
+);
 
-// CITY
-export async function fetchCity({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "city");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/cities",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_CITIES,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
+export const fetchTeam = createFetcher("team", FAKE_TEAMS, "/api/teams");
 
-// STORE
-export async function fetchStore({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "store");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/stores",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_STORES,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
-
-// DEPARTMENT
-export async function fetchDepartment({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "department");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/departments",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_DEPARTMENTS,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
-
-// TEAM
-export async function fetchTeam({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "team");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/teams",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_TEAMS,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
-
-// EMPLOYEE
-export async function fetchEmployee({ parentValues, useBackend = false }) {
-  const filterProps = filterConfig.find((f) => f.name === "employee");
-  if (useBackend) {
-    const data = await fetchFromBackend({
-      parentValues,
-      filterProps,
-      endpoint: "/api/employees",
-    });
-    return [ALL_OPTION, ...data];
-  }
-  return filterFakeData(
-    FAKE_EMPLOYEES,
-    flattenWithDependsOn(parentValues, filterProps)
-  );
-}
+export const fetchEmployee = createFetcher(
+  "employee",
+  FAKE_EMPLOYEES,
+  "/api/employees"
+);

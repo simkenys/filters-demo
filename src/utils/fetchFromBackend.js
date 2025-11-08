@@ -1,7 +1,8 @@
-// utils/fetchFromBackend.js
 /**
  * Generic backend fetcher
  */
+import { ALL_OPTION } from "../hooks/useFilterConstants";
+
 export async function fetchFromBackend({
   parentValues,
   filterProps,
@@ -20,5 +21,8 @@ export async function fetchFromBackend({
   });
 
   if (!res.ok) throw new Error(`Failed to fetch from ${endpoint}`);
-  return res.json();
+  const data = await res.json();
+
+  // Always include ALL_OPTION
+  return [ALL_OPTION, ...data];
 }
