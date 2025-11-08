@@ -6,6 +6,7 @@ import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
 import FilterMultiSelect from "../components/filters/FilterMultiSelect";
+import { SWRConfig } from "swr";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -13,9 +14,19 @@ import FilterMultiSelect from "../components/filters/FilterMultiSelect";
 export default function DashboardExample() {
   return (
     <BrowserRouter>
-      <FiltersProvider>
-        <DashboardInner />
-      </FiltersProvider>
+      <SWRConfig
+        value={{
+          dedupingInterval: 2000, // Dedupe identical requests within 2 seconds
+          revalidateOnFocus: false, // Don't refetch when window gains focus
+          revalidateOnReconnect: false, // Don't refetch on network reconnect
+          revalidateIfStale: false, // Don't revalidate stale data automatically
+          shouldRetryOnError: false, // Don't retry failed requests
+        }}
+      >
+        <FiltersProvider>
+          <DashboardInner />
+        </FiltersProvider>
+      </SWRConfig>
     </BrowserRouter>
   );
 }

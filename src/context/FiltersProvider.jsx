@@ -45,6 +45,8 @@ export function FiltersProvider({ children }) {
   const depsRef = useRef(new Map());
   const requestIdRef = useRef(new Map());
   const isInitializedRef = useRef(false);
+  const isUpdatingRef = useRef(false);
+  const pendingKeysRef = useRef(new Set());
 
   const registerDeps = (key, dependsOn) => {
     if (!dependsOn || dependsOn.length === 0) return;
@@ -60,38 +62,52 @@ export function FiltersProvider({ children }) {
   };
 
   const setFilter = async (key, value) => {
+    console.log("🔥 setFilter START:", key, value);
     const requestId = Date.now() + Math.random();
 
-    // Build next state with parent update
+    // Mark that we're updating and lock all affected keys
+    isUpdatingRef.current = true;
+    pendingKeysRef.current.add(key);
+
+    // Build next state with parent update - DON'T dispatch yet
     const nextState = { ...state, [key]: value };
     const allUpdates = { [key]: value };
 
-    // Collect all dependent children
+    // Collect all dependent children in dependency order
     const toProcess = [];
+    const seen = new Set();
     const collectChildren = (parentKey) => {
       for (const f of filterConfig) {
-        if (f.dependsOn?.includes(parentKey) && !toProcess.includes(f.name)) {
+        if (f.dependsOn?.includes(parentKey) && !seen.has(f.name)) {
+          seen.add(f.name);
           toProcess.push(f.name);
+          pendingKeysRef.current.add(f.name); // Lock this key too
           collectChildren(f.name);
         }
       }
     };
     collectChildren(key);
 
-    // Process each child and collect their updates
-    const childPromises = toProcess.map(async (childKey) => {
+    console.log("📋 toProcess:", toProcess);
+
+    // Process children SEQUENTIALLY in dependency order, not parallel
+    for (const childKey of toProcess) {
+      console.log("🔄 Processing child:", childKey);
       const f = filterConfig.find((fc) => fc.name === childKey);
-      if (!f) return null;
+      if (!f) continue;
 
       const currentValue = state[childKey];
       const childRequestId = requestId;
       requestIdRef.current.set(childKey, childRequestId);
 
-      // Calculate new parent values for child
+      // Calculate new parent values for child using allUpdates (which now has all ancestors)
       const newParentValues = f.dependsOn.map((pKey) => {
-        const parentValue = nextState[pKey] || allUpdates[pKey] || state[pKey];
+        const parentValue =
+          allUpdates[pKey] !== undefined ? allUpdates[pKey] : state[pKey];
         return Array.isArray(parentValue) ? parentValue : [parentValue];
       });
+
+      console.log(`  📞 Fetching ${childKey} with parents:`, newParentValues);
 
       const useBackend = f.useBackend ?? false;
 
@@ -102,7 +118,13 @@ export function FiltersProvider({ children }) {
           ? [{ ...f.defaultValue }]
           : { ...f.defaultValue };
 
-        if (requestIdRef.current.get(childKey) !== childRequestId) return null;
+        console.log(
+          `  ✅ Fetched ${childKey}, got ${
+            Array.isArray(newOptions) ? newOptions.length : 1
+          } options`
+        );
+
+        if (requestIdRef.current.get(childKey) !== childRequestId) continue;
 
         const validIds = new Set(
           Array.isArray(newOptions)
@@ -134,54 +156,48 @@ export function FiltersProvider({ children }) {
           }
         }
 
-        // Store the update for batch processing
+        // Store the update immediately so next children can use it
         allUpdates[childKey] = newValue;
         nextState[childKey] = newValue;
-
-        return { key: childKey, value: newValue };
       } catch (err) {
         console.error(`Error fetching dependent ${childKey}:`, err);
-        return null;
       }
-    });
-
-    const childResults = await Promise.all(childPromises);
-
-    // Batch update all state changes at once
-    dispatch({ type: "BATCH_SET", updates: allUpdates });
-
-    // Now build URL params from the final state
-    const newParams = new URLSearchParams(searchParams);
-
-    // Update URL for parent
-    if (Array.isArray(value)) {
-      const realIds = value.filter((v) => v.id !== -1).map((v) => v.id);
-      if (realIds.length > 0) newParams.set(key, realIds.join(","));
-      else newParams.delete(key);
-    } else if (value && value.id !== undefined && value.id !== -1) {
-      newParams.set(key, value.id);
-    } else {
-      newParams.delete(key);
     }
 
-    // Update URL for all children
-    childResults.forEach((result) => {
-      if (!result) return;
+    // NOW dispatch all updates at once - parent + all children
+    dispatch({ type: "BATCH_SET", updates: allUpdates });
 
-      const { key: childKey, value: childValue } = result;
+    // Clear the locks
+    pendingKeysRef.current.clear();
+    isUpdatingRef.current = false;
 
-      if (Array.isArray(childValue)) {
-        const realIds = childValue.filter((v) => v.id !== -1).map((v) => v.id);
-        if (realIds.length > 0) newParams.set(childKey, realIds.join(","));
-        else newParams.delete(childKey);
+    // Build URL params from the final state
+    const newParams = new URLSearchParams(searchParams);
+
+    // Helper to update URL for a key/value pair
+    const updateUrlParam = (paramKey, paramValue) => {
+      if (Array.isArray(paramValue)) {
+        const realIds = paramValue.filter((v) => v.id !== -1).map((v) => v.id);
+        if (realIds.length > 0) newParams.set(paramKey, realIds.join(","));
+        else newParams.delete(paramKey);
       } else if (
-        childValue &&
-        childValue.id !== undefined &&
-        childValue.id !== -1
+        paramValue &&
+        paramValue.id !== undefined &&
+        paramValue.id !== -1
       ) {
-        newParams.set(childKey, childValue.id);
+        newParams.set(paramKey, paramValue.id);
       } else {
-        newParams.delete(childKey);
+        newParams.delete(paramKey);
+      }
+    };
+
+    // Update URL for parent
+    updateUrlParam(key, value);
+
+    // Update URL for all children
+    toProcess.forEach((childKey) => {
+      if (allUpdates[childKey]) {
+        updateUrlParam(childKey, allUpdates[childKey]);
       }
     });
 
@@ -206,54 +222,74 @@ export function FiltersProvider({ children }) {
       return;
     }
 
-    const initPromises = filterConfig.map(async (f) => {
-      const raw = searchParams.get(f.name);
-      if (!raw || !f.fetcher) return null;
+    // Build a temporary state object from URL params to calculate parent values
+    const urlState = {};
 
-      const useBackend = f.useBackend ?? false;
-      const parentValues = getParentValues(f);
-
-      try {
-        const options = await f.fetcher({ parentValues, useBackend });
-
-        if (f.isMulti) {
-          const ids = raw.split(",").map((s) => parseInt(s, 10));
-          const matches = options.filter((o) => ids.includes(o.id));
-          if (matches.length > 0) {
-            return { key: f.name, value: matches };
-          }
-        } else {
-          const id = parseInt(raw, 10);
-          const match = options.find((o) => o.id === id);
-          if (match) {
-            return { key: f.name, value: match };
-          }
-        }
-      } catch (err) {
-        console.error(`Error initializing ${f.name}:`, err);
-      }
-
-      return null;
-    });
-
-    Promise.all(initPromises).then((results) => {
+    // Initialize all filters sequentially, respecting dependencies
+    const initializeFilters = async () => {
       const updates = {};
-      results.forEach((result) => {
-        if (result) {
-          updates[result.key] = result.value;
-        }
+
+      // Sort filters by dependency depth (parents before children)
+      const sortedFilters = [...filterConfig].sort((a, b) => {
+        const aDepth = a.dependsOn?.length || 0;
+        const bDepth = b.dependsOn?.length || 0;
+        return aDepth - bDepth;
       });
+
+      for (const f of sortedFilters) {
+        const raw = searchParams.get(f.name);
+        if (!raw || !f.fetcher) continue;
+
+        const useBackend = f.useBackend ?? false;
+
+        // Calculate parent values from URL state, not current state
+        const parentValues = (f.dependsOn || []).map((pKey) => {
+          const parentValue = urlState[pKey] || state[pKey];
+          return Array.isArray(parentValue) ? parentValue : [parentValue];
+        });
+
+        try {
+          const options = await f.fetcher({ parentValues, useBackend });
+
+          if (f.isMulti) {
+            const ids = raw.split(",").map((s) => parseInt(s, 10));
+            const matches = options.filter((o) => ids.includes(o.id));
+            if (matches.length > 0) {
+              updates[f.name] = matches;
+              urlState[f.name] = matches; // Store for dependent children
+            }
+          } else {
+            const id = parseInt(raw, 10);
+            const match = options.find((o) => o.id === id);
+            if (match) {
+              updates[f.name] = match;
+              urlState[f.name] = match; // Store for dependent children
+            }
+          }
+        } catch (err) {
+          console.error(`Error initializing ${f.name}:`, err);
+        }
+      }
 
       if (Object.keys(updates).length > 0) {
         dispatch({ type: "BATCH_SET", updates });
       }
 
       isInitializedRef.current = true;
-    });
+    };
+
+    initializeFilters();
   }, []); // Only run once on mount
 
   const value = useMemo(
-    () => ({ state, set: setFilter, reset, registerDeps }),
+    () => ({
+      state,
+      set: setFilter,
+      reset,
+      registerDeps,
+      isUpdating: isUpdatingRef.current,
+      isPending: (key) => pendingKeysRef.current.has(key),
+    }),
     [state]
   );
 

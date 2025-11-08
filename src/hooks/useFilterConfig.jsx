@@ -15,7 +15,7 @@ import { ALL_OPTION } from "./useFilterConstants";
  * true  → child filters reset automatically
  * false → child filters retain their current value if the value is a proper value for the parent selection
  */
-export const resetDependencies = true;
+export const resetDependencies = false;
 
 /**
  * Filter configuration: metadata only
