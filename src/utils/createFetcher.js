@@ -5,7 +5,7 @@ import { flattenWithDependsOn } from "./util";
 
 // Configuration
 export const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-export const PERSIST_CACHE = true; // Set to true to persist cache across page refreshes
+export const PERSIST_CACHE = false; // Set to true to persist cache across page refreshes
 export const CACHE_STORAGE_KEY = "filter-cache";
 
 // In-flight and completed request tracking
