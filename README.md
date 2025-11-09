@@ -151,15 +151,16 @@ Each filter in the system is defined in `filterConfig`, which describes how filt
 
 ### Configuration Properties
 
-| Property       | Type     | Required | Description                                        |
-| -------------- | -------- | -------- | -------------------------------------------------- |
-| `name`         | string   | Yes      | Unique identifier for the filter                   |
-| `label`        | string   | Yes      | Display label shown in the UI                      |
-| `defaultValue` | object   | Yes      | Initial value (typically `ALL_OPTION`)             |
-| `dependsOn`    | array    | No       | List of parent filter names this filter depends on |
-| `fetcher`      | function | Yes      | Async function that returns available options      |
-| `isMulti`      | boolean  | No       | Enable multi-select mode (default: false)          |
-| `useBackend`   | boolean  | No       | Use API (true) or fake data (false)                |
+| Property       | Type     | Required | Description                                           |
+| -------------- | -------- | -------- | ----------------------------------------------------- |
+| `name`         | string   | Yes      | Unique identifier for the filter                      |
+| `label`        | string   | Yes      | Display label shown in the UI                         |
+| `defaultValue` | object   | Yes      | Initial value (typically `ALL_OPTION`)                |
+| `dependsOn`    | array    | No       | List of parent filter names this filter depends on    |
+| `fetcher`      | function | Yes      | Async function that returns available options         |
+| `isMulti`      | boolean  | No       | Enable multi-select mode (default: false)             |
+| `useBackend`   | boolean  | No       | Use API (true) or fake data (false)                   |
+| `hide`         | boolean  | No       | Hide on no value parent (true) or always show (false) |
 
 ### Global Setting: resetDependencies
 
