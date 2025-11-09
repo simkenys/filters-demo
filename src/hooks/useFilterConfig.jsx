@@ -27,6 +27,7 @@ export const resetDependencies = false;
  * - fetcher: fetcher function
  * - isMulti: optional, multi-select
  * - useBackend: whether to fetch from API (true) or use FAKE_* data (false)
+ * - isAutoComplete: true or false
  *
  * Switch from dev → prod:
  * - Currently useBackend: true → development with FAKE_* data is useBackend: false
