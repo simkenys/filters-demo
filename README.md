@@ -31,12 +31,13 @@ A flexible, URL-synchronized filter system with multi-level dependencies and aut
   - [Filters Not Resetting](#filters-not-resetting)
   - [URL Not Syncing](#url-not-syncing)
 - [Customization](#customization)
+  - [Enable Cache Persistence Across Page Refreshes](#enable-cache-persistence-across-page-refreshes)
   - [Adjust Cache Duration](#adjust-cache-duration)
   - [Change Reset Behavior](#change-reset-behavior)
   - [Add Custom Validation](#add-custom-validation)
+  - [Adjust Debounce Duration](#adjust-debounce-duration)
+  - [Using Extra Dependencies](#using-extra-dependencies)
 - [Next Steps / Roadmap](#next-steps--roadmap)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Getting Started
 
