@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import FilterAutoCompleteSelect from "../components/filters/FilterAutoCompleteSelect";
 import FilterAutoCompleteMultiSelect from "../components/filters/FilterAutoCompleteMultiSelect";
 import FilterMultiSelect from "../components/filters/FilterMultiSelect";
-import FilterSelect from "../components/filters/FilterSelect";
+import FilterSelectVirtualized from "../components/filters/FilterSelectVirtualized";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -64,7 +64,7 @@ function DashboardInner() {
                 ) : f.isMulti ? (
                   <FilterMultiSelect name={f.name} />
                 ) : (
-                  <FilterSelect name={f.name} />
+                  <FilterSelectVirtualized name={f.name} />
                 )
               ) : null}
             </Box>
