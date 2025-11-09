@@ -1,4 +1,4 @@
-////////////////////////////
+/* eslint-disable no-unused-vars */
 // GET VERSION
 import { ALL_OPTION } from "../hooks/useFilterConstants";
 
@@ -6,7 +6,15 @@ export async function fetchFromBackend({
   parentValues,
   filterProps,
   endpoint,
+  extraDeps = [], // Accept but may not use in URL
 }) {
+  // Optionally include extraDeps in API call if your backend needs them
+  // extraDeps.forEach((dep, idx) => {
+  //   params.append(`extra${idx}`, dep);
+  // });
+
+  console.log("extraDeps", extraDeps);
+
   // Flatten parent selections and filter out -1 (All)
   const flatParents = parentValues
     .map((level, idx) =>

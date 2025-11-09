@@ -330,6 +330,42 @@ If child filters aren't resetting when parents change:
 
 ## Customization
 
+### Enable Cache Persistence Across Page Refreshes
+
+By default, the cache is cleared on page refresh. To persist cache across sessions, modify `fetchers.js`:
+
+```javascript
+const PERSIST_CACHE = true; // Enable localStorage persistence
+```
+
+**When enabled:**
+
+- Cache survives page refreshes
+- Stored in browser's localStorage
+- Shared across all tabs/windows of the same domain
+- Still respects the `CACHE_DURATION` TTL
+
+**When to enable:**
+
+- Filters rarely change on the backend
+- Want to improve performance for returning users
+- Network requests are expensive/slow
+
+**When to keep disabled (default):**
+
+- Filter data changes frequently
+- Users need fresh data on each visit
+- Privacy/security concerns about cached data
+
+**Manual cache clearing:**
+
+```javascript
+import { clearFilterCache } from "./fetchers/fetchers";
+
+// Clear cache programmatically
+clearFilterCache();
+```
+
 ### Adjust Cache Duration
 
 In `fetchers.js`:
