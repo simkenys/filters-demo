@@ -39,7 +39,7 @@ export function useFilterOptions(
           throw new Error(`useFilterOptions: Unknown filter ${filterName}`);
 
         // Call fetcher with structured parentValues
-        const fetched = await conf.fetcher({ parentValues });
+        const fetched = await conf.fetcher({ parentValues, extraDeps });
         if (!signal.aborted) setOptions(fetched);
       } catch (err) {
         if (!signal.aborted) console.error(err);
