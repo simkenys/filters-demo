@@ -1,11 +1,13 @@
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../context/FiltersProvider";
-import FilterSelect from "../components/filters/FilterSelect";
 import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
 import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
+import FilterAutoCompleteSelect from "../components/filters/FilterAutoCompleteSelect";
+import FilterAutoCompleteMultiSelect from "../components/filters/FilterAutoCompleteMultiSelect";
 import FilterMultiSelect from "../components/filters/FilterMultiSelect";
+import FilterSelect from "../components/filters/FilterSelect";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -52,8 +54,19 @@ function DashboardInner() {
 
           return (
             <Box key={f.name} width={250}>
-              {!f?.isMulti && <FilterSelect name={f.name} />}
-              {f?.isMulti && <FilterMultiSelect name={f.name} />}
+              {f ? (
+                f.isAutoComplete ? (
+                  f.isMulti ? (
+                    <FilterAutoCompleteMultiSelect name={f.name} />
+                  ) : (
+                    <FilterAutoCompleteSelect name={f.name} />
+                  )
+                ) : f.isMulti ? (
+                  <FilterMultiSelect name={f.name} />
+                ) : (
+                  <FilterSelect name={f.name} />
+                )
+              ) : null}
             </Box>
           );
         })}
