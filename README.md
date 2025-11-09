@@ -257,7 +257,7 @@ export const filterConfig = [
 - Concurrent requests with identical parameters share the same promise (deduplication)
 - Completed requests are cached for 5 minutes (configurable)
 - Cache survives filter changes - going back to previous selections uses cached data
-- Cache is cleared on page refresh
+- Cache is cleared on page refresh (configurable)
 
 ## Usage Example
 
