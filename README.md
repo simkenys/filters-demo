@@ -145,6 +145,7 @@ Each filter in the system is defined in `filterConfig`, which describes how filt
   fetcher: fetchRegion,                 // Async function to load available options
   isMulti: true,                        // Allows multi-selection (optional)
   useBackend: true,                     // true = API, false = FAKE_* data
+  hide: true                            // true = if direct parent dependecy has no value selected (-1) then hide the filter, false = always show the filter
 }
 ```
 
@@ -440,6 +441,7 @@ function MyFilterComponent({ currentUserId, dateRange }) {
 
 ## Next Steps / Roadmap
 
+- [x] Hide filter when parent filter has no specific value selected (-1)
 - [ ] Add autocomplete single-select component
 - [ ] Add autocomplete multi-select component
 - [ ] Add filter presets/saved views

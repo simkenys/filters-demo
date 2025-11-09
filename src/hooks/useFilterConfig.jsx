@@ -115,5 +115,6 @@ export const filterConfig = [
     ],
     fetcher: fetchEmployee,
     useBackend: true,
+    hide: true,
   },
 ];

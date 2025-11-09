@@ -40,12 +40,23 @@ function DashboardInner() {
 
       {/* -------------------- Filter selects -------------------- */}
       <Box display="flex" gap={2} flexWrap="wrap">
-        {filterConfig.map((f) => (
-          <Box key={f.name} width={250}>
-            {!f?.isMulti && <FilterSelect name={f.name} />}
-            {f?.isMulti && <FilterMultiSelect name={f.name} />}
-          </Box>
-        ))}
+        {filterConfig.map((f) => {
+          // Check if this filter should be hidden based on parent
+          if (f.hide && f.dependsOn?.length) {
+            const directParentKey = f.dependsOn[f.dependsOn.length - 1]; // immediate parent
+            const parentValue = state[directParentKey];
+            if (!parentValue || parentValue.id === -1) {
+              return null; // hide this filter
+            }
+          }
+
+          return (
+            <Box key={f.name} width={250}>
+              {!f?.isMulti && <FilterSelect name={f.name} />}
+              {f?.isMulti && <FilterMultiSelect name={f.name} />}
+            </Box>
+          );
+        })}
       </Box>
 
       {/* -------------------- Active filters bar -------------------- */}
