@@ -2,7 +2,10 @@ import { filterConfig } from "../hooks/useFilterConfig";
 import { fetchFromBackend } from "./fetchFromBackend";
 import { filterFakeData } from "./filterFakeData";
 import { flattenWithDependsOn } from "./util";
-import { mutate } from "swr";
+
+// In-flight and completed request tracking
+const requestCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes (or set to Infinity for permanent cache)
 
 // Helper to create a stable cache key for SWR
 function createCacheKey(filterName, parentValues, useBackend) {
@@ -13,7 +16,6 @@ function createCacheKey(filterName, parentValues, useBackend) {
     .sort()
     .join("|");
 
-  // Include useBackend in key to separate fake vs real data cache
   return `${filterName}/${useBackend ? "backend" : "fake"}/${sortedParams}`;
 }
 
@@ -26,7 +28,7 @@ export function createFetcher(filterName, fakeData, endpoint) {
 
     const useBackend = filterProps.useBackend ?? false;
 
-    // If using fake data, don't use SWR cache (fake data is instant anyway)
+    // If using fake data, return immediately
     if (!useBackend) {
       return filterFakeData(
         fakeData,
@@ -34,32 +36,56 @@ export function createFetcher(filterName, fakeData, endpoint) {
       );
     }
 
-    // Backend fetch with SWR deduplication
     const cacheKey = createCacheKey(filterName, parentValues, useBackend);
+    const cached = requestCache.get(cacheKey);
 
-    try {
-      // Use SWR's mutate to fetch with automatic deduplication
-      const data = await mutate(
-        cacheKey,
-        async () => {
-          console.log(`🌐 Actually fetching ${filterName} from backend`);
-          return fetchFromBackend({ parentValues, filterProps, endpoint });
-        },
-        {
-          revalidate: false,
-          populateCache: true,
-          rollbackOnError: true,
-        }
-      );
+    // If we have a cached entry, check if it's still valid or in-flight
+    if (cached) {
+      // If promise exists, request is in-flight - return same promise
+      if (cached.promise) {
+        console.log(
+          `⏳ Deduplicating ${filterName} - reusing in-flight request`
+        );
+        return cached.promise;
+      }
 
-      return data;
-    } catch (err) {
-      console.error(
-        `[createFetcher] Backend fetch failed for ${filterName}:`,
-        err
-      );
-      // Fallback: empty array (or throw in prod)
-      return [];
+      // If data exists and cache is fresh, return cached data
+      if (cached.data && Date.now() - cached.timestamp < CACHE_DURATION) {
+        console.log(`💾 Using cached ${filterName}`);
+        return cached.data;
+      }
     }
+
+    // Create new request
+    console.log(`🌐 Actually fetching ${filterName} from backend`);
+
+    const promise = fetchFromBackend({ parentValues, filterProps, endpoint })
+      .then((data) => {
+        // Update cache with data and remove promise
+        requestCache.set(cacheKey, {
+          data,
+          timestamp: Date.now(),
+          promise: null,
+        });
+        return data;
+      })
+      .catch((err) => {
+        // Remove from cache on error
+        requestCache.delete(cacheKey);
+        console.error(
+          `[createFetcher] Backend fetch failed for ${filterName}:`,
+          err
+        );
+        return []; // Fallback
+      });
+
+    // Store the in-flight promise
+    requestCache.set(cacheKey, {
+      promise,
+      timestamp: Date.now(),
+      data: null,
+    });
+
+    return promise;
   };
 }
