@@ -145,20 +145,22 @@ Each filter in the system is defined in `filterConfig`, which describes how filt
   fetcher: fetchRegion,                 // Async function to load available options
   isMulti: true,                        // Allows multi-selection (optional)
   useBackend: true,                     // true = API, false = FAKE_* data
+  hide: true                            // true = if direct parent dependecy has no value selected (-1) then hide the filter, false = always show the filter
 }
 ```
 
 ### Configuration Properties
 
-| Property       | Type     | Required | Description                                        |
-| -------------- | -------- | -------- | -------------------------------------------------- |
-| `name`         | string   | Yes      | Unique identifier for the filter                   |
-| `label`        | string   | Yes      | Display label shown in the UI                      |
-| `defaultValue` | object   | Yes      | Initial value (typically `ALL_OPTION`)             |
-| `dependsOn`    | array    | No       | List of parent filter names this filter depends on |
-| `fetcher`      | function | Yes      | Async function that returns available options      |
-| `isMulti`      | boolean  | No       | Enable multi-select mode (default: false)          |
-| `useBackend`   | boolean  | No       | Use API (true) or fake data (false)                |
+| Property       | Type     | Required | Description                                           |
+| -------------- | -------- | -------- | ----------------------------------------------------- |
+| `name`         | string   | Yes      | Unique identifier for the filter                      |
+| `label`        | string   | Yes      | Display label shown in the UI                         |
+| `defaultValue` | object   | Yes      | Initial value (typically `ALL_OPTION`)                |
+| `dependsOn`    | array    | No       | List of parent filter names this filter depends on    |
+| `fetcher`      | function | Yes      | Async function that returns available options         |
+| `isMulti`      | boolean  | No       | Enable multi-select mode (default: false)             |
+| `useBackend`   | boolean  | No       | Use API (true) or fake data (false)                   |
+| `hide`         | boolean  | No       | Hide on no value parent (true) or always show (false) |
 
 ### Global Setting: resetDependencies
 
@@ -440,6 +442,7 @@ function MyFilterComponent({ currentUserId, dateRange }) {
 
 ## Next Steps / Roadmap
 
+- [x] Hide filter when parent filter has no specific value selected (-1)
 - [ ] Add autocomplete single-select component
 - [ ] Add autocomplete multi-select component
 - [ ] Add filter presets/saved views
