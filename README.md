@@ -1,6 +1,6 @@
 # Filter System
 
-A flexible, URL-synchronized filter system with multi-level dependencies and automatic validation cascading. Built for React applications that require complex hierarchical filtering with proper state management and URL persistence.
+A flexible, URL-synchronized filter system with multi-level dependencies and automatic validation cascading. Built for React applications that require complex hierarchical filtering with proper state management, URL persistence, and virtualized rendering for optimal performance.
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@ A flexible, URL-synchronized filter system with multi-level dependencies and aut
   - [Multi-Level Dependencies](#multi-level-dependencies)
   - [Immediate Validation and Cascade](#immediate-validation-and-cascade)
   - [URL Synchronization](#url-synchronization)
+  - [Virtualization](#virtualization)
   - [Flexible Data Fetching](#flexible-data-fetching)
   - [Router Integration](#router-integration)
 - [Filter Configuration Overview](#filter-configuration-overview)
@@ -113,6 +114,13 @@ The application will start and open in your browser, typically at `http://localh
 - Initial load reads the URL to populate filter state
 - Supports bookmarking and sharing with selected filters
 - URL is the single source of truth on page load
+
+### Virtualization
+
+- All filter components use `react-window` for virtualized rendering
+- Only visible dropdown items are rendered to the DOM
+- Ensures smooth performance with large datasets (1000+ options)
+- Minimal overhead for small lists
 
 ### Flexible Data Fetching
 
@@ -447,6 +455,10 @@ function MyFilterComponent({ currentUserId, dateRange }) {
 - [x] Hide filter when parent filter has no specific value selected (-1)
 - [x] Add autocomplete single-select component
 - [x] Add autocomplete multi-select component
+- [x] Virtualized select
+- [x] Virtualized multi select
+- [x] Virtualized autocomplete select
+- [x] Virtualized autocomplete multi select
 - [ ] Add filter presets/saved views
 - [ ] Add loading states for filter options
 - [ ] Implement optimistic updates

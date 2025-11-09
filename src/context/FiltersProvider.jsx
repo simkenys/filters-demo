@@ -53,14 +53,6 @@ export function FiltersProvider({ children }) {
     depsRef.current.set(key, dependsOn);
   };
 
-  const getParentValues = (filter) => {
-    if (!filter.dependsOn || filter.dependsOn.length === 0) return [];
-    return filter.dependsOn.map((pKey) => {
-      const parentValue = state[pKey];
-      return Array.isArray(parentValue) ? parentValue : [parentValue];
-    });
-  };
-
   const setFilter = async (key, value) => {
     console.log("🔥 setFilter START:", key, value);
     const requestId = Date.now() + Math.random();
@@ -161,6 +153,9 @@ export function FiltersProvider({ children }) {
         nextState[childKey] = newValue;
       } catch (err) {
         console.error(`Error fetching dependent ${childKey}:`, err);
+        // On error, keep current value instead of resetting
+        allUpdates[childKey] = currentValue;
+        nextState[childKey] = currentValue;
       }
     }
 
@@ -170,6 +165,12 @@ export function FiltersProvider({ children }) {
     // Clear the locks
     pendingKeysRef.current.clear();
     isUpdatingRef.current = false;
+
+    // CRITICAL: Don't update URL params during initialization
+    if (!isInitializedRef.current) {
+      console.log("⏭️ Skipping URL update - still initializing");
+      return;
+    }
 
     // Build URL params from the final state
     const newParams = new URLSearchParams(searchParams);
@@ -201,6 +202,7 @@ export function FiltersProvider({ children }) {
       }
     });
 
+    console.log("🔗 Setting URL params:", newParams.toString());
     setSearchParams(newParams);
   };
 
@@ -222,6 +224,8 @@ export function FiltersProvider({ children }) {
       return;
     }
 
+    console.log("🚀 Initializing from URL:", searchParams.toString());
+
     // Build a temporary state object from URL params to calculate parent values
     const urlState = {};
 
@@ -238,7 +242,26 @@ export function FiltersProvider({ children }) {
 
       for (const f of sortedFilters) {
         const raw = searchParams.get(f.name);
-        if (!raw || !f.fetcher) continue;
+        if (!raw) continue;
+
+        console.log(`🔍 Initializing ${f.name} from URL:`, raw);
+
+        // If no fetcher, trust the URL value and create minimal objects
+        if (!f.fetcher) {
+          if (f.isMulti) {
+            const ids = raw.split(",").map((s) => parseInt(s, 10));
+            const items = ids.map((id) => ({ id, label: `ID ${id}` }));
+            updates[f.name] = items;
+            urlState[f.name] = items;
+          } else {
+            const id = parseInt(raw, 10);
+            const item = { id, label: `ID ${id}` };
+            updates[f.name] = item;
+            urlState[f.name] = item;
+          }
+          console.log(`✅ ${f.name} set (no fetcher):`, updates[f.name]);
+          continue;
+        }
 
         const useBackend = f.useBackend ?? false;
 
@@ -250,32 +273,68 @@ export function FiltersProvider({ children }) {
 
         try {
           const options = await f.fetcher({ parentValues, useBackend });
+          console.log(`  📦 Fetched ${options.length} options for ${f.name}`);
 
           if (f.isMulti) {
             const ids = raw.split(",").map((s) => parseInt(s, 10));
             const matches = options.filter((o) => ids.includes(o.id));
             if (matches.length > 0) {
               updates[f.name] = matches;
-              urlState[f.name] = matches; // Store for dependent children
+              urlState[f.name] = matches;
+              console.log(`✅ ${f.name} set:`, matches);
+            } else {
+              // CRITICAL: If no matches found, preserve URL IDs with placeholder labels
+              console.warn(
+                `⚠️ Filter ${f.name}: No matches for IDs ${ids.join(
+                  ", "
+                )} in fetched options. Preserving URL values.`
+              );
+              const placeholders = ids.map((id) => ({ id, label: `ID ${id}` }));
+              updates[f.name] = placeholders;
+              urlState[f.name] = placeholders;
             }
           } else {
             const id = parseInt(raw, 10);
             const match = options.find((o) => o.id === id);
             if (match) {
               updates[f.name] = match;
-              urlState[f.name] = match; // Store for dependent children
+              urlState[f.name] = match;
+              console.log(`✅ ${f.name} set:`, match);
+            } else {
+              // CRITICAL: If no match found, preserve URL ID with placeholder label
+              console.warn(
+                `⚠️ Filter ${f.name}: No match for ID ${id} in fetched options. Preserving URL value.`
+              );
+              const placeholder = { id, label: `ID ${id}` };
+              updates[f.name] = placeholder;
+              urlState[f.name] = placeholder;
             }
           }
         } catch (err) {
-          console.error(`Error initializing ${f.name}:`, err);
+          console.error(`❌ Error initializing ${f.name}:`, err);
+          // CRITICAL: On fetch error, preserve URL values with placeholder labels
+          if (f.isMulti) {
+            const ids = raw.split(",").map((s) => parseInt(s, 10));
+            const placeholders = ids.map((id) => ({ id, label: `ID ${id}` }));
+            updates[f.name] = placeholders;
+            urlState[f.name] = placeholders;
+          } else {
+            const id = parseInt(raw, 10);
+            const placeholder = { id, label: `ID ${id}` };
+            updates[f.name] = placeholder;
+            urlState[f.name] = placeholder;
+          }
         }
       }
+
+      console.log("📝 Final updates:", updates);
 
       if (Object.keys(updates).length > 0) {
         dispatch({ type: "BATCH_SET", updates });
       }
 
       isInitializedRef.current = true;
+      console.log("✅ Initialization complete");
     };
 
     initializeFilters();

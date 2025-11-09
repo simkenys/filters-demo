@@ -77,6 +77,7 @@ export const filterConfig = [
     dependsOn: ["continent", "country", "region", "city"],
     fetcher: fetchStore,
     useBackend: true,
+    isAutoComplete: true,
   },
   {
     name: "department",
@@ -85,6 +86,8 @@ export const filterConfig = [
     dependsOn: ["continent", "country", "region", "city", "store"],
     fetcher: fetchDepartment,
     useBackend: true,
+    isMulti: true,
+    isAutoComplete: true,
   },
   {
     name: "team",
@@ -100,6 +103,7 @@ export const filterConfig = [
     ],
     fetcher: fetchTeam,
     useBackend: true,
+    hide: true,
   },
   {
     name: "employee",

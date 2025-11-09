@@ -4,10 +4,10 @@ import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
 import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
-import FilterAutoCompleteSelect from "../components/filters/FilterAutoCompleteSelect";
-import FilterAutoCompleteMultiSelect from "../components/filters/FilterAutoCompleteMultiSelect";
-import FilterMultiSelect from "../components/filters/FilterMultiSelect";
 import FilterSelectVirtualized from "../components/filters/FilterSelectVirtualized";
+import FilterMultiSelectVirtualized from "../components/filters/FilterMultiSelectVirtualized";
+import FilterAutoCompleteSelectVirtualized from "../components/filters/FilterAutoCompleteSelectVirtualized";
+import FilterAutoCompleteMultiSelectVirtualized from "../components/filters/FilterAutoCompleteMultiSelectVirtualized";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -57,12 +57,12 @@ function DashboardInner() {
               {f ? (
                 f.isAutoComplete ? (
                   f.isMulti ? (
-                    <FilterAutoCompleteMultiSelect name={f.name} />
+                    <FilterAutoCompleteMultiSelectVirtualized name={f.name} />
                   ) : (
-                    <FilterAutoCompleteSelect name={f.name} />
+                    <FilterAutoCompleteSelectVirtualized name={f.name} />
                   )
                 ) : f.isMulti ? (
-                  <FilterMultiSelect name={f.name} />
+                  <FilterMultiSelectVirtualized name={f.name} />
                 ) : (
                   <FilterSelectVirtualized name={f.name} />
                 )
