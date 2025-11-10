@@ -10,7 +10,6 @@ import {
 import Autocomplete from "@mui/material/Autocomplete";
 import { VariableSizeList } from "react-window";
 import { useFilters } from "../../context/FiltersProvider";
-import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 import { useSearchParams } from "react-router-dom";
 
@@ -48,12 +47,15 @@ const ListboxComponent = React.forwardRef(function ListboxComponent(
           overscanCount={5}
         >
           {({ index, style, data }) => {
-            return React.cloneElement(data[index], {
-              style: {
-                ...style,
-                ...(data[index].props.style || {}),
-              },
-            });
+            const child = data[index];
+
+            return (
+              <div style={style} key={child.key || index}>
+                {React.cloneElement(child, {
+                  style: undefined, // Remove style from child, it's on wrapper
+                })}
+              </div>
+            );
           }}
         </VariableSizeList>
       </div>
@@ -71,7 +73,13 @@ export default function FilterAutoCompleteMultiSelectVirtualized({
   debounceMs = 200,
   extraDeps = [],
 }) {
-  const { state, set, registerDeps } = useFilters();
+  const {
+    state,
+    set,
+    registerDeps,
+    config: filterConfig,
+    isInitialized,
+  } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
 
@@ -114,6 +122,9 @@ export default function FilterAutoCompleteMultiSelectVirtualized({
 
   // Validation: remove invalid selections
   useEffect(() => {
+    // CRITICAL: Don't validate during initialization
+    if (!isInitialized) return;
+
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
@@ -136,6 +147,7 @@ export default function FilterAutoCompleteMultiSelectVirtualized({
 
     return () => clearTimeout(valDebounceRef.current);
   }, [
+    isInitialized,
     options,
     selectedValues,
     name,
@@ -196,12 +208,15 @@ export default function FilterAutoCompleteMultiSelectVirtualized({
         loading={loading}
         disableCloseOnSelect
         ListboxComponent={ListboxComponent}
-        renderOption={(props, option, { selected }) => (
-          <li {...props}>
-            <Checkbox style={{ marginRight: 8 }} checked={selected} />
-            <ListItemText primary={option.label} />
-          </li>
-        )}
+        renderOption={(props, option, { selected }) => {
+          const { key, ...otherProps } = props;
+          return (
+            <li key={key} {...otherProps}>
+              <Checkbox style={{ marginRight: 8 }} checked={selected} />
+              <ListItemText primary={option.label} />
+            </li>
+          );
+        }}
         onInputChange={(_event, newInputValue) => setInputValue(newInputValue)}
         renderTags={(tagValue, _getTagProps) => {
           // Use inputValue from state, not ownerState

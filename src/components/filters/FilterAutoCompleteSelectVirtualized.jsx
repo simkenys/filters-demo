@@ -3,7 +3,6 @@ import { FormControl, TextField, CircularProgress } from "@mui/material";
 import Autocomplete from "@mui/material/Autocomplete";
 import { VariableSizeList } from "react-window";
 import { useFilters } from "../../context/FiltersProvider";
-import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 import { useSearchParams } from "react-router-dom";
 
@@ -63,7 +62,7 @@ export default function FilterAutoCompleteSelectVirtualized({
   debounceMs = 200,
   extraDeps = [],
 }) {
-  const { state, set, registerDeps } = useFilters();
+  const { state, set, registerDeps, config: filterConfig } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const conf = filterConfig.find((f) => f.name === name);

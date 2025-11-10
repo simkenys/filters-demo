@@ -85,21 +85,21 @@ export function createFetcher(filterName, fakeData, endpoint) {
     if (cached) {
       // If promise exists, request is in-flight - return same promise
       if (cached.promise) {
-        console.log(
-          `⏳ Deduplicating ${filterName} - reusing in-flight request`
-        );
+        // console.log(
+        //   `⏳ Deduplicating ${filterName} - reusing in-flight request`
+        // );
         return cached.promise;
       }
 
       // If data exists and cache is fresh, return cached data
       if (cached.data && Date.now() - cached.timestamp < CACHE_DURATION) {
-        console.log(`💾 Using cached ${filterName}`);
+        // console.log(`💾 Using cached ${filterName}`);
         return cached.data;
       }
     }
 
     // Create new request
-    console.log(`🌐 Actually fetching ${filterName} from backend`);
+    // console.log(`🌐 Actually fetching ${filterName} from backend`);
 
     const promise = fetchFromBackend({ parentValues, filterProps, endpoint })
       .then((data) => {

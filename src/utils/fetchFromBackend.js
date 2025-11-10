@@ -13,7 +13,7 @@ export async function fetchFromBackend({
   //   params.append(`extra${idx}`, dep);
   // });
 
-  console.log("extraDeps", extraDeps);
+  // console.log("extraDeps", extraDeps);
 
   // Flatten parent selections and filter out -1 (All)
   const flatParents = parentValues

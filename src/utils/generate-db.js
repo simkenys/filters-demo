@@ -44,10 +44,10 @@ const teams = [];
 const employees = [];
 
 // Adjustable parameters
-const STORE_COUNT = 10; // per city
-const DEPT_PER_STORE = 2;
-const TEAM_PER_DEPT = 2;
-const EMP_PER_TEAM = 2;
+const STORE_COUNT = 5; // per city
+const DEPT_PER_STORE = 5;
+const TEAM_PER_DEPT = 5;
+const EMP_PER_TEAM = 5;
 
 let storeId = 1;
 let deptId = 1;
