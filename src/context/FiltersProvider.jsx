@@ -66,7 +66,7 @@ export function FiltersProvider({
   };
 
   const setFilter = async (key, value) => {
-    console.log("🔥 setFilter START:", key, value);
+    // console.log("🔥 setFilter START:", key, value);
     const requestId = Date.now() + Math.random();
 
     // Mark that we're updating and lock all affected keys
@@ -93,11 +93,11 @@ export function FiltersProvider({
     };
     collectChildren(key);
 
-    console.log("📋 toProcess:", toProcess);
+    // console.log("📋 toProcess:", toProcess);
 
     // Process children SEQUENTIALLY in dependency order, not parallel
     for (const childKey of toProcess) {
-      console.log("🔄 Processing child:", childKey);
+      // console.log("🔄 Processing child:", childKey);
       const f = config.find((fc) => fc.name === childKey);
       if (!f) continue;
 
@@ -112,7 +112,7 @@ export function FiltersProvider({
         return Array.isArray(parentValue) ? parentValue : [parentValue];
       });
 
-      console.log(`  📞 Fetching ${childKey} with parents:`, newParentValues);
+      // console.log(`  📞 Fetching ${childKey} with parents:`, newParentValues);
 
       const useBackend = f.useBackend ?? false;
 
@@ -123,11 +123,11 @@ export function FiltersProvider({
           ? [{ ...f.defaultValue }]
           : { ...f.defaultValue };
 
-        console.log(
-          `  ✅ Fetched ${childKey}, got ${
-            Array.isArray(newOptions) ? newOptions.length : 1
-          } options`
-        );
+        // console.log(
+        //   `  ✅ Fetched ${childKey}, got ${
+        //     Array.isArray(newOptions) ? newOptions.length : 1
+        //   } options`
+        // );
 
         if (requestIdRef.current.get(childKey) !== childRequestId) continue;
 
@@ -182,7 +182,7 @@ export function FiltersProvider({
 
     // CRITICAL: Don't update URL params during initialization
     if (!isInitialized) {
-      console.log("⏭️ Skipping URL update - still initializing");
+      // console.log("⏭️ Skipping URL update - still initializing");
       return;
     }
 
@@ -216,7 +216,7 @@ export function FiltersProvider({
       }
     });
 
-    console.log("🔗 Setting URL params:", newParams.toString());
+    // console.log("🔗 Setting URL params:", newParams.toString());
     setSearchParams(newParams);
   };
 
@@ -238,7 +238,7 @@ export function FiltersProvider({
       return;
     }
 
-    console.log("🚀 Initializing from URL:", searchParams.toString());
+    // console.log("🚀 Initializing from URL:", searchParams.toString());
 
     // Set loading state during initialization
     setIsLoading(true);
@@ -264,7 +264,7 @@ export function FiltersProvider({
         const raw = urlParamsSnapshot.get(f.name);
         if (!raw) continue;
 
-        console.log(`🔍 Initializing ${f.name} from URL:`, raw);
+        // console.log(`🔍 Initializing ${f.name} from URL:`, raw);
 
         // If no fetcher, trust the URL value and create minimal objects
         if (!f.fetcher) {
@@ -279,7 +279,7 @@ export function FiltersProvider({
             updates[f.name] = item;
             urlState[f.name] = item;
           }
-          console.log(`✅ ${f.name} set (no fetcher):`, updates[f.name]);
+          // console.log(`✅ ${f.name} set (no fetcher):`, updates[f.name]);
           continue;
         }
 
@@ -293,7 +293,7 @@ export function FiltersProvider({
 
         try {
           const options = await f.fetcher({ parentValues, useBackend });
-          console.log(`  📦 Fetched ${options.length} options for ${f.name}`);
+          // console.log(`  📦 Fetched ${options.length} options for ${f.name}`);
 
           if (f.isMulti) {
             const ids = raw.split(",").map((s) => parseInt(s, 10));
@@ -301,7 +301,7 @@ export function FiltersProvider({
             if (matches.length > 0) {
               updates[f.name] = matches;
               urlState[f.name] = matches;
-              console.log(`✅ ${f.name} set:`, matches);
+              // console.log(`✅ ${f.name} set:`, matches);
             } else {
               // CRITICAL: If no matches found, preserve URL IDs with placeholder labels
               console.warn(
@@ -319,7 +319,7 @@ export function FiltersProvider({
             if (match) {
               updates[f.name] = match;
               urlState[f.name] = match;
-              console.log(`✅ ${f.name} set:`, match);
+              // console.log(`✅ ${f.name} set:`, match);
             } else {
               // CRITICAL: If no match found, preserve URL ID with placeholder label
               console.warn(
@@ -347,7 +347,7 @@ export function FiltersProvider({
         }
       }
 
-      console.log("📝 Final updates:", updates);
+      // console.log("📝 Final updates:", updates);
 
       if (Object.keys(updates).length > 0) {
         dispatch({ type: "BATCH_SET", updates });
@@ -374,7 +374,7 @@ export function FiltersProvider({
 
       setIsInitialized(true);
       setIsLoading(false);
-      console.log("✅ Initialization complete");
+      // console.log("✅ Initialization complete");
     };
 
     initializeFilters();

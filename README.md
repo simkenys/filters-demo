@@ -231,11 +231,11 @@ export const filterConfig = [
 - Handles filter updates and dependency cascading
 - Manages URL synchronization
 - Processes children sequentially to prevent race conditions
+- Configures global behavior (`resetDependencies`)
 
 **Filter Configuration** (`useFilterConfig.jsx`)
 
 - Defines all available filters and their relationships
-- Configures global behavior (`resetDependencies`)
 - Single source of truth for filter metadata
 
 **Fetchers** (`fetchers.js`)
@@ -459,6 +459,7 @@ function MyFilterComponent({ currentUserId, dateRange }) {
 - [x] Virtualized multi select
 - [x] Virtualized autocomplete select
 - [x] Virtualized autocomplete multi select
+- [ ] Make a packaged version (npm i filterprovider)
 - [ ] Add filter presets/saved views
 - [ ] Add loading states for filter options
 - [ ] Implement optimistic updates

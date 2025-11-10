@@ -4,12 +4,9 @@ import ActiveFiltersBar from "../components/debuggers/ActiveFiltersBar";
 import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
-import FilterSelectVirtualized from "../components/filters/FilterSelectVirtualized";
-import FilterMultiSelectVirtualized from "../components/filters/FilterMultiSelectVirtualized";
-import FilterAutoCompleteSelectVirtualized from "../components/filters/FilterAutoCompleteSelectVirtualized";
-import FilterAutoCompleteMultiSelectVirtualized from "../components/filters/FilterAutoCompleteMultiSelectVirtualized";
 import { LoadingOverlay } from "../components/LoadingOverlay";
 import FilterOptionsCountDisplay from "../components/debuggers/FilterOptionsCountDisplay";
+import SelectAuto from "../components/SelectAuto";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -49,32 +46,7 @@ function DashboardInner() {
       {/* -------------------- Filter selects -------------------- */}
       <Box display="flex" gap={2} flexWrap="wrap">
         {filterConfig.map((f) => {
-          // Check if this filter should be hidden based on parent
-          if (f.hide && f.dependsOn?.length) {
-            const directParentKey = f.dependsOn[f.dependsOn.length - 1]; // immediate parent
-            const parentValue = state[directParentKey];
-            if (!parentValue || parentValue.id === -1) {
-              return null; // hide this filter
-            }
-          }
-
-          return (
-            <Box key={f.name} width={250}>
-              {f ? (
-                f.isAutoComplete ? (
-                  f.isMulti ? (
-                    <FilterAutoCompleteMultiSelectVirtualized name={f.name} />
-                  ) : (
-                    <FilterAutoCompleteSelectVirtualized name={f.name} />
-                  )
-                ) : f.isMulti ? (
-                  <FilterMultiSelectVirtualized name={f.name} />
-                ) : (
-                  <FilterSelectVirtualized name={f.name} />
-                )
-              ) : null}
-            </Box>
-          );
+          return <SelectAuto key={f.name} filter={f} state={state} />;
         })}
       </Box>
 
