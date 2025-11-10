@@ -1,6 +1,6 @@
 ## Installation
 
-Documentation and demo project: `https://github.com/simkenys/filters-demo`
+Documentation and demo project: <https://github.com/simkenys/filters-demo>
 
 ## Test the build:
 
@@ -13,6 +13,6 @@ npm run build
 
 ```bash
 npm login
-npm verion patch
+npm version patch
 npm publish
 ```
