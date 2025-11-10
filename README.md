@@ -1,465 +1,631 @@
-# Filter System
+# FiltersProvider Library
 
-A flexible, URL-synchronized filter system with multi-level dependencies and automatic validation cascading. Built for React applications that require complex hierarchical filtering with proper state management, URL persistence, and virtualized rendering for optimal performance.
+A production-ready React filters library with URL synchronization, dependency management, and Material-UI components.
+(This Git also contains a demo example project)
 
 ## Table of Contents
 
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Start Local JSON Server](#start-local-json-server)
-  - [Start Example Project](#start-example-project)
-- [Key Features](#key-features)
-  - [Dynamic Filter Configuration](#dynamic-filter-configuration)
-  - [Multi-Level Dependencies](#multi-level-dependencies)
-  - [Immediate Validation and Cascade](#immediate-validation-and-cascade)
-  - [URL Synchronization](#url-synchronization)
-  - [Virtualization](#virtualization)
-  - [Flexible Data Fetching](#flexible-data-fetching)
-  - [Router Integration](#router-integration)
-- [Filter Configuration Overview](#filter-configuration-overview)
-  - [Example Filter Definition](#example-filter-definition)
-  - [Configuration Properties](#configuration-properties)
-  - [Global Setting: resetDependencies](#global-setting-resetdependencies)
-  - [Example Filter Configuration](#example-filter-configuration)
-- [Architecture Overview](#architecture-overview)
-  - [Core Components](#core-components)
-  - [Data Flow](#data-flow)
-  - [Cache Behavior](#cache-behavior)
-- [Usage Example](#usage-example)
+- [Features](#features)
+- [Installation](#installation)
+  - [Peer Dependencies](#peer-dependencies)
+  - [Optional Dependencies](#optional-dependencies)
+- [Quick Start](#quick-start)
+  - [1. Define Your Filter Configuration](#1-define-your-filter-configuration)
+  - [2. Wrap Your App with FiltersProvider](#2-wrap-your-app-with-filtersprovider)
+  - [3. Use Filter Components](#3-use-filter-components)
+- [API Reference](#api-reference)
+  - [FiltersProvider](#filtersprovider)
+  - [useFilters Hook](#usefilters-hook)
+  - [useFilterOptions Hook](#usefilteroptions-hook)
+- [Filter Configuration](#filter-configuration)
+  - [FilterConfig Object](#filterconfig-object)
+  - [Fetcher Function](#fetcher-function)
+- [Available Filter Components](#available-filter-components)
+  - [FilterSelect](#filterselect)
+  - [FilterMultiSelect](#filtermultiselect)
+  - [FilterAutoCompleteSelect](#filterautocompleteselect)
+  - [FilterAutoCompleteMultiSelect](#filterautocompletemultiselect)
+  - [FilterSelectVirtualized](#filterselectvirtualized)
+  - [FilterMultiSelectVirtualized](#filtermultiselectvirtualized)
+  - [FilterAutoCompleteSelectVirtualized](#filterautocompleteselectvirtualized)
+  - [FilterAutoCompleteMultiSelectVirtualized](#filterautocompletemultiselectvirtualized)
+  - [SelectAuto](#selectauto)
+- [Debug Components](#debug-components)
+  - [FilterOptionsCountDisplay](#filteroptionscountdisplay)
+- [URL Synchronization](#url-synchronization)
+- [Advanced Usage](#advanced-usage)
+  - [Custom Filter Components](#custom-filter-components)
+  - [Conditional Filters](#conditional-filters)
+  - [Backend vs Mock Data](#backend-vs-mock-data)
 - [Troubleshooting](#troubleshooting)
-  - [Duplicate Network Requests in Development](#duplicate-network-requests-in-development)
-  - [Filters Not Resetting](#filters-not-resetting)
-  - [URL Not Syncing](#url-not-syncing)
-- [Customization](#customization)
-  - [Enable Cache Persistence Across Page Refreshes](#enable-cache-persistence-across-page-refreshes)
-  - [Adjust Cache Duration](#adjust-cache-duration)
-  - [Change Reset Behavior](#change-reset-behavior)
-  - [Add Custom Validation](#add-custom-validation)
-  - [Adjust Debounce Duration](#adjust-debounce-duration)
-  - [Using Extra Dependencies](#using-extra-dependencies)
-- [Next Steps / Roadmap](#next-steps--roadmap)
+- [Browser Support](#browser-support)
+- [License](#license)
+- [Contributing](#contributing)
+- [Support](#support)
 
-## Getting Started
+## Features
 
-### Prerequisites
+- ✅ **URL Synchronization** - Filter state automatically syncs with URL parameters
+- ✅ **Dependent Filters** - Cascading filters with automatic dependency management
+- ✅ **Multi-Select Support** - Single and multi-select filters
+- ✅ **Backend Integration** - Flexible fetcher functions for dynamic options
+- ✅ **Loading States** - Built-in loading indicators during filter updates
+- ✅ **Material-UI Components** - Beautiful, accessible filter components
+- ✅ **Virtualized Lists** - Performance optimization for large option lists
+- ✅ **TypeScript Ready** - Full type definitions included
 
-- Node.js installed (v16 or higher recommended)
-- npm or yarn package manager
-
-### Installation
-
-Install all required dependencies:
+## Installation
 
 ```bash
-npm install
+npm install filtersprovider
 ```
 
-This includes:
-
-- React and React Router for UI and routing
-- json-server and cors for local API development
-- All other project dependencies
-
-### Start Local JSON Server
-
-**(Required when `useBackend: true` in your filterConfig)**
-
-Start the local API server:
+### Peer Dependencies
 
 ```bash
-npm run api:dev
+npm install react@^19 react-dom@^19 react-router-dom@^7 @mui/material@^7 @emotion/react @emotion/styled
 ```
 
-The API will be available at `http://localhost:4000`
+### Optional Dependencies
 
-The server uses `db.json` as the data source. You can edit `db.json` to change or add data. The `server.js` file is the entry point that configures `json-server` with custom routes and middleware (including CORS support).
-
-### Start Example Project
-
-Run the development server:
+For virtualized filter lists:
 
 ```bash
-npm run dev
+npm install react-window
 ```
 
-The application will start and open in your browser, typically at `http://localhost:5173`
+For MUI icons in filters:
 
-## Key Features
-
-### Dynamic Filter Configuration
-
-- All filters are defined in a single `filterConfig` array
-- Each filter specifies its dependencies, fetcher, and behavior
-- Easy to add, remove, or modify filters without touching component code
-
-### Multi-Level Dependencies
-
-- Changing a parent filter automatically validates all child filters recursively
-- Child filters reset behavior is configurable via `resetDependencies` setting:
-  - `false`: Child filters keep their selection if it's still valid for the new parent values
-  - `true`: Child filters always reset when a parent filter changes
-
-### Immediate Validation and Cascade
-
-- Filter values are validated against available options
-- Sequential processing ensures children always use correct parent values
-- **Configurable debounce** prevents excessive fetching during rapid filter changes (default: 100ms)
-- In-memory cache prevents duplicate network requests for identical parameters (5-minute TTL, configurable)
-- Handles React StrictMode double-invokes gracefully
-
-### URL Synchronization
-
-- Filters automatically update URL query parameters on change
-- Initial load reads the URL to populate filter state
-- Supports bookmarking and sharing with selected filters
-- URL is the single source of truth on page load
-
-### Virtualization
-
-- All filter components use `react-window` for virtualized rendering
-- Only visible dropdown items are rendered to the DOM
-- Ensures smooth performance with large datasets (1000+ options)
-- Minimal overhead for small lists
-
-### Flexible Data Fetching
-
-- `useFilterOptions` hook handles all fetch logic
-- Compatible with multiple data sources:
-  - Fake data for development (local FAKE\_\* data)
-  - Custom API fetchers for production
-- Toggle between sources via `useBackend` flag in `useFilterConfig.jsx`:
-  - `useBackend: true` → Fetch from API
-  - `useBackend: false` → Use local FAKE\_\* data
-
-### Router Integration
-
-- Built on React Router for seamless URL management
-- Uses `useSearchParams` for query parameter handling
-- Example wrapped in `BrowserRouter` for full functionality
-
-## Filter Configuration Overview
-
-Each filter in the system is defined in `filterConfig`, which describes how filters are displayed and how they depend on each other.
-
-### Example Filter Definition
-
-```javascript
-{
-  name: "region",                       // Unique key used internally
-  label: "Region",                      // Display label for the UI
-  defaultValue: ALL_OPTION,             // Initial value when no selection
-  dependsOn: ["continent", "country"],  // Parent filters this one listens to
-  fetcher: fetchRegion,                 // Async function to load available options
-  isMulti: true,                        // Allows multi-selection (optional)
-  isAutoComplete: false,               // Allows autocomplete typing for search
-  useBackend: true,                     // true = API, false = FAKE_* data
-  hide: true                            // true = if direct parent dependecy has no value selected (-1) then hide the filter, false = always show the filter
-}
+```bash
+npm install @mui/icons-material
 ```
 
-### Configuration Properties
+## Quick Start
 
-| Property         | Type     | Required | Description                                           |
-| ---------------- | -------- | -------- | ----------------------------------------------------- |
-| `name`           | string   | Yes      | Unique identifier for the filter                      |
-| `label`          | string   | Yes      | Display label shown in the UI                         |
-| `defaultValue`   | object   | Yes      | Initial value (typically `ALL_OPTION`)                |
-| `dependsOn`      | array    | No       | List of parent filter names this filter depends on    |
-| `fetcher`        | function | Yes      | Async function that returns available options         |
-| `isMulti`        | boolean  | No       | Enable multi-select mode (default: false)             |
-| `isAutoComplete` | boolean  | No       | Enable autocomplete typing mode (default: false)      |
-| `useBackend`     | boolean  | No       | Use API (true) or fake data (false)                   |
-| `hide`           | boolean  | No       | Hide on no value parent (true) or always show (false) |
+### 1. Define Your Filter Configuration
 
-### Global Setting: resetDependencies
-
-Located in `useFilterConfig.jsx`:
+Create a `filterConfig.js` file in your project:
 
 ```javascript
-export const resetDependencies = false;
-```
-
-**Behavior:**
-
-- **`true`** → When a parent filter changes (e.g., Continent → Europe), all child filters reset automatically to their default values
-- **`false`** → Child filters keep their current selection if the selected value is still valid for the new parent values
-
-This makes it easy to control whether child filters should "remember" previous selections or always reset on parent changes.
-
-### Example Filter Configuration
-
-```javascript
+// src/filterConfig.js
 export const filterConfig = [
-  {
-    name: "continent",
-    label: "Continent",
-    defaultValue: ALL_OPTION,
-    dependsOn: [],
-    fetcher: fetchContinent,
-    useBackend: true,
-  },
   {
     name: "country",
     label: "Country",
-    defaultValue: ALL_OPTION,
-    dependsOn: ["continent"],
-    fetcher: fetchCountry,
-    isMulti: true,
-    useBackend: true,
+    isMulti: false,
+    defaultValue: { id: -1, label: "All Countries" },
+    fetcher: async ({ parentValues, useBackend }) => {
+      const response = await fetch("/api/countries");
+      return response.json();
+    },
   },
   {
     name: "region",
     label: "Region",
-    defaultValue: ALL_OPTION,
-    dependsOn: ["continent", "country"],
-    fetcher: fetchRegion,
     isMulti: true,
-    useBackend: true,
+    defaultValue: { id: -1, label: "All Regions" },
+    dependsOn: ["country"],
+    fetcher: async ({ parentValues, useBackend }) => {
+      const [countryValues] = parentValues;
+      const countryIds = countryValues
+        .map((c) => c.id)
+        .filter((id) => id !== -1);
+
+      if (countryIds.length === 0) return [];
+
+      const response = await fetch(
+        `/api/regions?countries=\${countryIds.join(",")}`
+      );
+      return response.json();
+    },
   },
-  // ... more filters
+  {
+    name: "city",
+    label: "City",
+    isMulti: true,
+    defaultValue: { id: -1, label: "All Cities" },
+    dependsOn: ["country", "region"],
+    fetcher: async ({ parentValues, useBackend }) => {
+      const [countryValues, regionValues] = parentValues;
+      const regionIds = regionValues.map((r) => r.id).filter((id) => id !== -1);
+
+      if (regionIds.length === 0) return [];
+
+      const response = await fetch(
+        `/api/cities?regions=\${regionIds.join(",")}`
+      );
+      return response.json();
+    },
+  },
 ];
 ```
 
-## Architecture Overview
-
-### Core Components
-
-**FiltersProvider** (`FiltersProvider.jsx`)
-
-- Central state management for all filters
-- Handles filter updates and dependency cascading
-- Manages URL synchronization
-- Processes children sequentially to prevent race conditions
-- Configures global behavior (`resetDependencies`)
-
-**Filter Configuration** (`useFilterConfig.jsx`)
-
-- Defines all available filters and their relationships
-- Single source of truth for filter metadata
-
-**Fetchers** (`fetchers.js`)
-
-- Implements data fetching with deduplication
-- In-memory cache with configurable TTL (default: 5 minutes)
-- Handles both API and fake data sources
-- Prevents duplicate network requests
-
-**useFilterOptions Hook** (`useFilterOptions.jsx`)
-
-- Fetches filter options with debouncing (default: 100ms)
-- Cancels in-flight requests when dependencies change
-- Provides loading states for UI feedback
-- Accepts optional extra dependencies for complex scenarios (like a user id)
-
-### Data Flow
-
-1. User changes a filter → `setFilter` is called
-2. Parent filter value is updated
-3. All dependent children are collected recursively
-4. Children are processed **sequentially** in dependency order:
-   - Fetch new options based on updated parent values
-   - Validate current selection against new options
-   - Reset to default if invalid (or if `resetDependencies: true`)
-5. All state updates batched and dispatched together
-6. URL parameters updated to reflect new state
-
-### Cache Behavior
-
-- Concurrent requests with identical parameters share the same promise (deduplication)
-- Completed requests are cached for 5 minutes (configurable)
-- Cache survives filter changes - going back to previous selections uses cached data
-- Cache is cleared on page refresh (configurable)
-
-## Usage Example
+### 2. Wrap Your App with FiltersProvider
 
 ```javascript
-import { FiltersProvider, useFilters } from "./context/FiltersProvider";
-import { useFilterOptions } from "./hooks/useFilterOptions";
+// src/App.jsx
+import { BrowserRouter } from "react-router-dom";
+import { FiltersProvider } from "filtersprovider";
+import { filterConfig } from "./filterConfig";
+import Dashboard from "./Dashboard";
 
-function MyFilterComponent() {
-  const { state, set } = useFilters();
+export default function App() {
+  return (
+    <BrowserRouter>
+      <FiltersProvider config={filterConfig} resetDependencies={false}>
+        <Dashboard />
+      </FiltersProvider>
+    </BrowserRouter>
+  );
+}
+```
 
-  // Fetch options with debouncing
+### 3. Use Filter Components
+
+```javascript
+// src/Dashboard.jsx
+import { useFilters } from "filtersprovider";
+import {
+  FilterSelect,
+  FilterAutoCompleteSelect,
+  FilterAutoCompleteMultiSelect,
+} from "filtersprovider/filters";
+
+export default function Dashboard() {
+  const { state, isLoading } = useFilters();
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+
+      {/* Single select dropdown */}
+      <FilterSelect filterName="country" />
+
+      {/* Multi-select autocomplete */}
+      <FilterAutoCompleteMultiSelect filterName="region" />
+
+      {/* Virtualized multi-select for large lists */}
+      <FilterAutoCompleteMultiSelectVirtualized filterName="city" />
+
+      {isLoading && <p>Loading filters...</p>}
+
+      {/* Access filter state */}
+      <pre>{JSON.stringify(state, null, 2)}</pre>
+    </div>
+  );
+}
+```
+
+## API Reference
+
+### `FiltersProvider`
+
+Wraps your application and manages filter state.
+
+**Props:**
+
+| Prop                | Type             | Required | Default | Description                                            |
+| ------------------- | ---------------- | -------- | ------- | ------------------------------------------------------ |
+| `config`            | `FilterConfig[]` | ✅       | -       | Array of filter configurations                         |
+| `resetDependencies` | `boolean`        | ❌       | `false` | Reset dependent filters to default when parent changes |
+| `children`          | `ReactNode`      | ✅       | -       | Your app components                                    |
+
+**Example:**
+
+```javascript
+<FiltersProvider config={filterConfig} resetDependencies={false}>
+  <App />
+</FiltersProvider>
+```
+
+### `useFilters` Hook
+
+Access filter state and actions.
+
+**Returns:**
+
+```typescript
+{
+state: Record<string, FilterValue>, // Current filter values
+set: (key: string, value: any) => void, // Update a filter
+reset: () => void, // Reset all filters
+isLoading: boolean, // Loading state
+isInitialized: boolean, // Initialization complete
+config: FilterConfig[] // Filter configuration
+}
+```
+
+**Example:**
+
+```javascript
+const { state, set, reset, isLoading } = useFilters();
+
+// Update a filter
+set("country", { id: 1, label: "USA" });
+
+// Reset all filters
+reset();
+
+// Check loading state
+if (isLoading) {
+  console.log("Filters are updating...");
+}
+```
+
+### `useFilterOptions` Hook
+
+Fetch filter options dynamically (useful for custom components).
+
+**Parameters:**
+
+```typescript
+useFilterOptions(
+config: FilterConfig[],
+filterName: string,
+parentValues?: any[][],
+extraDeps?: any[],
+opts?: { debounceMs?: number }
+)
+```
+
+**Returns:**
+
+```typescript
+{
+options: any[], // Fetched options
+loading: boolean // Loading state
+}
+```
+
+**Example:**
+
+```javascript
+import { useFilters, useFilterOptions } from "filtersprovider";
+
+function CustomFilter() {
+  const { state, config } = useFilters();
+
   const { options, loading } = useFilterOptions(
-    "country",
-    [[state.continent]], // Parent values
-    [],
-    { debounceMs: 100 }
+    config,
+    "region",
+    [state.country], // Parent values
+    [], // Extra dependencies
+    { debounceMs: 300 }
   );
 
+  return (
+    <div>{loading ? "Loading..." : `\${options.length} regions available`}</div>
+  );
+}
+```
+
+## Filter Configuration
+
+### FilterConfig Object
+
+```typescript
+{
+name: string; // Unique filter identifier
+label: string; // Display label
+isMulti: boolean; // Single or multi-select
+defaultValue: object; // Default value { id: -1, label: "All" }
+dependsOn?: string[]; // Parent filter dependencies
+useBackend?: boolean; // Flag for fetcher to use backend
+fetcher?: (params) => Promise<any[]>; // Function to fetch options
+}
+```
+
+### Fetcher Function
+
+The `fetcher` function receives:
+
+```typescript
+{
+parentValues: any[][]; // Array of parent filter values
+useBackend?: boolean; // Backend flag from config
+extraDeps?: any[]; // Additional dependencies
+}
+```
+
+**Example:**
+
+```javascript
+fetcher: async ({ parentValues, useBackend }) => {
+  const [countryValues] = parentValues;
+  const countryIds = countryValues.map((c) => c.id).filter((id) => id !== -1);
+
+  if (countryIds.length === 0) {
+    return [{ id: -1, label: "Select a country first" }];
+  }
+
+  const url = useBackend
+    ? `/api/regions?countries=\${countryIds.join(",")}`
+    : `/mock/regions?countries=\${countryIds.join(",")}`;
+
+  const response = await fetch(url);
+  return response.json();
+};
+```
+
+## Available Filter Components
+
+### `FilterSelect`
+
+Standard MUI Select dropdown (single-select).
+
+```javascript
+<FilterSelect filterName="country" />
+```
+
+### `FilterMultiSelect`
+
+Standard MUI Select dropdown (multi-select).
+
+```javascript
+<FilterMultiSelect filterName="region" />
+```
+
+### `FilterAutoCompleteSelect`
+
+MUI Autocomplete with search (single-select).
+
+```javascript
+<FilterAutoCompleteSelect filterName="country" />
+```
+
+### `FilterAutoCompleteMultiSelect`
+
+MUI Autocomplete with search (multi-select).
+
+```javascript
+<FilterAutoCompleteMultiSelect filterName="region" />
+```
+
+### `FilterSelectVirtualized`
+
+Virtualized Select for large option lists (single-select).
+
+```javascript
+<FilterSelectVirtualized filterName="country" />
+```
+
+### `FilterMultiSelectVirtualized`
+
+Virtualized Select for large option lists (multi-select).
+
+```javascript
+<FilterMultiSelectVirtualized filterName="city" />
+```
+
+### `FilterAutoCompleteSelectVirtualized`
+
+Virtualized Autocomplete (single-select).
+
+```javascript
+<FilterAutoCompleteSelectVirtualized filterName="country" />
+```
+
+### `FilterAutoCompleteMultiSelectVirtualized`
+
+Virtualized Autocomplete (multi-select).
+
+```javascript
+<FilterAutoCompleteMultiSelectVirtualized filterName="city" />
+```
+
+### `SelectAuto`
+
+Automatically renders the appropriate component based on the filter configuration provided to `FiltersProvider`. Detects whether the filter is single/multi-select and whether virtualization is needed based on the config's `isMulti` property and option count.
+
+```javascript
+<SelectAuto filterName="region" />
+```
+
+The component will automatically choose:
+
+- `FilterSelect` or `FilterMultiSelect` for standard lists
+- `FilterSelectVirtualized` or `FilterMultiSelectVirtualized` for large lists
+- Based on the `isMulti` property in your filter config
+
+## Debug Components
+
+### `FilterOptionsCountDisplay`
+
+Display filter option counts for debugging.
+
+```javascript
+import { FilterOptionsCountDisplay } from "filtersprovider/debuggers";
+
+<FilterOptionsCountDisplay extraDeps={[]} />;
+```
+
+## URL Synchronization
+
+Filters automatically sync with URL query parameters:
+
+```
+
+# Single filter
+
+/dashboard?country=1
+
+# Multiple filters
+
+/dashboard?country=1&region=5,6,7&city=12
+
+# Share URLs with pre-populated filters!
+
+```
+
+### Benefits:
+
+- **Bookmarkable** - Users can bookmark filtered views
+- **Shareable** - Share filtered dashboards via URL
+- **Browser navigation** - Back/forward buttons work as expected
+- **Deep linking** - Link directly to specific filter states
+
+## Advanced Usage
+
+### Custom Filter Components
+
+```javascript
+import { useFilters, useFilterOptions } from "filtersprovider";
+
+function CustomRangeFilter({ filterName }) {
+  const { state, set, config } = useFilters();
+  const { options, loading } = useFilterOptions(config, filterName, [], []);
+
   const handleChange = (newValue) => {
-    set("country", newValue);
+    set(filterName, newValue);
   };
 
   return (
-    <select
-      value={state.country.id}
-      onChange={(e) =>
-        handleChange({
-          id: e.target.value,
-          label: e.target.options[e.target.selectedIndex].text,
-        })
-      }
-      disabled={loading}
-    >
+    <div>
+      <label>{filterName}</label>
       {loading ? (
-        <option>Loading...</option>
+        <span>Loading...</span>
       ) : (
-        options.map((opt) => (
-          <option key={opt.id} value={opt.id}>
-            {opt.label}
-          </option>
-        ))
+        <input
+          type="range"
+          min={options[0]?.id}
+          max={options[options.length - 1]?.id}
+          value={state[filterName]?.id}
+          onChange={(e) =>
+            handleChange({
+              id: parseInt(e.target.value),
+              label: `Value \${e.target.value}`,
+            })
+          }
+        />
       )}
-    </select>
+    </div>
   );
 }
+```
+
+### Conditional Filters
+
+```javascript
+const filterConfig = [
+  {
+    name: "productType",
+    label: "Product Type",
+    isMulti: false,
+    defaultValue: { id: -1, label: "All Types" },
+    fetcher: async () => {
+      return [
+        { id: 1, label: "Electronics" },
+        { id: 2, label: "Clothing" },
+      ];
+    },
+  },
+  {
+    name: "brand",
+    label: "Brand",
+    isMulti: true,
+    defaultValue: { id: -1, label: "All Brands" },
+    dependsOn: ["productType"],
+    fetcher: async ({ parentValues }) => {
+      const [typeValues] = parentValues;
+      const typeId = typeValues[0]?.id;
+
+      // Return different brands based on product type
+      if (typeId === 1) {
+        return [
+          { id: 101, label: "Apple" },
+          { id: 102, label: "Samsung" },
+        ];
+      } else if (typeId === 2) {
+        return [
+          { id: 201, label: "Nike" },
+          { id: 202, label: "Adidas" },
+        ];
+      }
+
+      return [];
+    },
+  },
+];
+```
+
+### Backend vs Mock Data
+
+```javascript
+const filterConfig = [
+  {
+    name: "country",
+    label: "Country",
+    isMulti: false,
+    defaultValue: { id: -1, label: "All Countries" },
+    useBackend: true, // Flag to use real backend
+    fetcher: async ({ useBackend }) => {
+      const url = useBackend
+        ? "/api/countries" // Production endpoint
+        : "/mock/countries"; // Development mock
+
+      const response = await fetch(url);
+      return response.json();
+    },
+  },
+];
+
+// Switch between backend and mock
+<FiltersProvider
+  config={filterConfig.map((f) => ({
+    ...f,
+    useBackend: process.env.NODE_ENV === "production",
+  }))}
+>
+  <App />
+</FiltersProvider>;
 ```
 
 ## Troubleshooting
 
-### Duplicate Network Requests in Development
+### Filters not updating
 
-If you see duplicate network requests in development:
+- Check that `fetcher` returns data in correct format: `[{ id, label }, ...]`
+- Verify `dependsOn` array matches parent filter names exactly
+- Ensure parent filters are defined before dependent filters in config
 
-- This is caused by React StrictMode, which intentionally double-invokes functions
-- The cache system prevents actual duplicate fetches (both calls share the same promise)
-- This behavior only happens in development and will not occur in production
+### URL not syncing
 
-### Filters Not Resetting
+- Verify `BrowserRouter` wraps `FiltersProvider`
+- Check browser console for URL parameter format
 
-If child filters aren't resetting when parents change:
+### Performance issues with large lists
 
-- Check `resetDependencies` setting in `useFilterConfig.jsx`
-- Verify the `dependsOn` array is correctly defined for each filter
-- Ensure fetchers are returning valid data structures
+- Use virtualized components (`\*Virtualized` variants)
+- Consider debouncing in fetcher functions
+- Implement server-side pagination in your API
 
-### URL Not Syncing
+### TypeScript errors
 
-- Verify `BrowserRouter` wraps your `FiltersProvider`
-- Check that filters have unique `name` properties
-- Ensure you're using `useSearchParams` from `react-router-dom`
+- Install type definitions: `npm install @types/react @types/react-dom`
+- Ensure peer dependencies match your project versions
 
-## Customization
+## Browser Support
 
-### Enable Cache Persistence Across Page Refreshes
+- Chrome (latest)
+- Firefox (latest)
+- Safari (latest)
+- Edge (latest)
 
-By default, the cache is cleared on page refresh. To persist cache across sessions, modify `fetchers.js`:
+## License
 
-```javascript
-const PERSIST_CACHE = true; // Enable localStorage persistence
-```
+MIT
 
-**When enabled:**
+## Contributing
 
-- Cache survives page refreshes
-- Stored in browser's localStorage
-- Shared across all tabs/windows of the same domain
-- Still respects the `CACHE_DURATION` TTL
+Contributions welcome! Please open an issue or submit a pull request.
 
-**When to enable:**
+## Support
 
-- Filters rarely change on the backend
-- Want to improve performance for returning users
-- Network requests are expensive/slow
+For issues and questions:
 
-**When to keep disabled (default):**
+- GitHub Issues: [your-repo-url/issues]
+- Documentation: [your-docs-url]
 
-- Filter data changes frequently
-- Users need fresh data on each visit
-- Privacy/security concerns about cached data
+---
 
-**Manual cache clearing:**
-
-```javascript
-import { clearFilterCache } from "./fetchers/fetchers";
-
-// Clear cache programmatically
-clearFilterCache();
-```
-
-### Adjust Cache Duration
-
-In `fetchers.js`:
-
-```javascript
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-// or
-const CACHE_DURATION = Infinity; // Never expires (until page refresh)
-```
-
-### Change Reset Behavior
-
-In `useFilterConfig.jsx`:
-
-```javascript
-export const resetDependencies = true; // Always reset children
-```
-
-### Add Custom Validation
-
-Modify the validation logic in `FiltersProvider.jsx` within the `setFilter` function to add custom rules for specific filters.
-
-### Adjust Debounce Duration
-
-The `useFilterOptions` hook accepts a `debounceMs` option:
-
-```javascript
-const { options, loading } = useFilterOptions(
-  "region",
-  parentValues,
-  [],
-  { debounceMs: 300 } // Wait 300ms before fetching
-);
-```
-
-**Default:** 100ms
-**Use cases:**
-
-- Increase for search/autocomplete inputs (e.g., 300-500ms)
-- Decrease for instant feedback (e.g., 0ms)
-- Keep default (100ms) for standard dropdowns
-
-### Using Extra Dependencies
-
-The `useFilterOptions` hook accepts an `extraDeps` parameter for scenarios where options depend on values outside the filter hierarchy (e.g., current user, date range, or other context).
-
-```javascript
-function MyFilterComponent({ currentUserId, dateRange }) {
-  const { state } = useFilters();
-
-  // Options depend on parent filters AND external values
-  const { options, loading } = useFilterOptions(
-    "region",
-    [[state.continent], [state.country]],
-    [currentUserId, dateRange], // Extra dependencies
-    { debounceMs: 100 }
-  );
-
-  // Options will refetch when continent, country, userId, or dateRange changes
-}
-```
-
-**Common use cases:**
-
-- **User-specific data:** Filter options based on current user's permissions or preferences
-- **Time-based filtering:** Options change based on selected date range
-- **Feature flags:** Show/hide options based on enabled features
-- **External state:** Options depend on Redux store, URL params, or other context
-
-**Note:** Extra dependencies are serialized via `JSON.stringify`, so only use primitive values or simple objects.
-
-## Next Steps / Roadmap
-
-- [x] Hide filter when parent filter has no specific value selected (-1)
-- [x] Add autocomplete single-select component
-- [x] Add autocomplete multi-select component
-- [x] Virtualized select
-- [x] Virtualized multi select
-- [x] Virtualized autocomplete select
-- [x] Virtualized autocomplete multi select
-- [ ] Make a packaged version (npm i filterprovider)
-- [ ] Add filter presets/saved views
-- [ ] Add loading states for filter options
-- [ ] Implement optimistic updates
+Made with ❤️ by Simke Nys
