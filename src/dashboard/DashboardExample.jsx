@@ -1,6 +1,6 @@
 import { Box, Typography } from "@mui/material";
 import { FiltersProvider, useFilters } from "../context/FiltersProvider";
-import ActiveFiltersBar from "../components/filters/ActiveFiltersBar";
+import ActiveFiltersBar from "../components/debuggers/ActiveFiltersBar";
 import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
 import { useEffect } from "react";
@@ -8,6 +8,8 @@ import FilterSelectVirtualized from "../components/filters/FilterSelectVirtualiz
 import FilterMultiSelectVirtualized from "../components/filters/FilterMultiSelectVirtualized";
 import FilterAutoCompleteSelectVirtualized from "../components/filters/FilterAutoCompleteSelectVirtualized";
 import FilterAutoCompleteMultiSelectVirtualized from "../components/filters/FilterAutoCompleteMultiSelectVirtualized";
+import { LoadingOverlay } from "../components/LoadingOverlay";
+import FilterOptionsCountDisplay from "../components/debuggers/FilterOptionsCountDisplay";
 
 /**
  * Main Dashboard wrapper with FiltersProvider
@@ -15,7 +17,7 @@ import FilterAutoCompleteMultiSelectVirtualized from "../components/filters/Filt
 export default function DashboardExample() {
   return (
     <BrowserRouter>
-      <FiltersProvider>
+      <FiltersProvider config={filterConfig} resetDependencies={false}>
         <DashboardInner />
       </FiltersProvider>
     </BrowserRouter>
@@ -26,19 +28,23 @@ export default function DashboardExample() {
  * Inner dashboard component that consumes filters
  */
 function DashboardInner() {
-  const { state } = useFilters();
+  const { state, isInitialized, isLoading } = useFilters();
 
   // Example: trigger API call whenever filters change
   useEffect(() => {
-    console.log("Fetch data with filters:", state);
-    // Production: replace with actual API call here
-  }, [state]);
+    if (isInitialized) {
+      console.log("Fetch data with filters:", state);
+      // Production: replace with actual API call here
+    }
+  }, [state, isInitialized]);
 
   return (
     <Box p={3} display="flex" flexDirection="column" gap={3}>
       <Typography variant="h5" fontWeight="bold">
         Dynamic Filter Dashboard
       </Typography>
+
+      <LoadingOverlay isLoading={isLoading} />
 
       {/* -------------------- Filter selects -------------------- */}
       <Box display="flex" gap={2} flexWrap="wrap">
@@ -74,6 +80,7 @@ function DashboardInner() {
 
       {/* -------------------- Active filters bar -------------------- */}
       <ActiveFiltersBar />
+      <FilterOptionsCountDisplay />
 
       {/* -------------------- Debug: current filter state -------------------- */}
       <Box>

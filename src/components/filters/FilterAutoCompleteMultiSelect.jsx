@@ -8,7 +8,6 @@ import {
 } from "@mui/material";
 import Autocomplete from "@mui/material/Autocomplete";
 import { useFilters } from "../../context/FiltersProvider";
-import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 import { useSearchParams } from "react-router-dom";
 
@@ -22,7 +21,13 @@ export default function FilterAutoCompleteMultiSelect({
   debounceMs = 200,
   extraDeps = [],
 }) {
-  const { state, set, registerDeps } = useFilters();
+  const {
+    state,
+    set,
+    registerDeps,
+    config: filterConfig,
+    isInitialized,
+  } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
 
@@ -65,6 +70,9 @@ export default function FilterAutoCompleteMultiSelect({
 
   // Validation: remove invalid selections
   useEffect(() => {
+    // CRITICAL: Don't validate during initialization
+    if (!isInitialized) return;
+
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
@@ -87,6 +95,7 @@ export default function FilterAutoCompleteMultiSelect({
 
     return () => clearTimeout(valDebounceRef.current);
   }, [
+    isInitialized,
     options,
     selectedValues,
     name,

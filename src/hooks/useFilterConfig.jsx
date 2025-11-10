@@ -14,8 +14,9 @@ import { ALL_OPTION } from "./useFilterConstants";
  * Global option: whether child filters should reset when a parent filter changes.
  * true  → child filters reset automatically
  * false → child filters retain their current value if the value is a proper value for the parent selection
- */
-export const resetDependencies = false;
+      export const resetDependencies = false 
+      is now part of the FilterProvider
+*/
 
 /**
  * Filter configuration: metadata only
@@ -50,7 +51,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent"],
     fetcher: fetchCountry,
-    isMulti: true,
+
     useBackend: true,
   },
   {
@@ -59,7 +60,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country"],
     fetcher: fetchRegion,
-    isMulti: true,
+
     useBackend: true,
   },
   {
@@ -77,7 +78,7 @@ export const filterConfig = [
     dependsOn: ["continent", "country", "region", "city"],
     fetcher: fetchStore,
     useBackend: true,
-    isAutoComplete: true,
+    isMulti: true,
   },
   {
     name: "department",
@@ -87,7 +88,6 @@ export const filterConfig = [
     fetcher: fetchDepartment,
     useBackend: true,
     isMulti: true,
-    isAutoComplete: true,
   },
   {
     name: "team",

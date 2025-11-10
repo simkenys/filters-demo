@@ -10,7 +10,6 @@ import {
 } from "@mui/material";
 import { FixedSizeList } from "react-window";
 import { useFilters } from "../../context/FiltersProvider";
-import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 import { useSearchParams } from "react-router-dom";
 
@@ -89,7 +88,13 @@ export default function FilterMultiSelectVirtualized({
   debounceMs = 200,
   extraDeps = [],
 }) {
-  const { state, set, registerDeps } = useFilters();
+  const {
+    state,
+    set,
+    registerDeps,
+    config: filterConfig,
+    isInitialized,
+  } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const conf = filterConfig.find((f) => f.name === name);
@@ -132,6 +137,9 @@ export default function FilterMultiSelectVirtualized({
   // Validation: remove invalid selections
   // ------------------------
   useEffect(() => {
+    // CRITICAL: Don't validate during initialization
+    if (!isInitialized) return;
+
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
@@ -155,6 +163,7 @@ export default function FilterMultiSelectVirtualized({
 
     return () => clearTimeout(valDebounceRef.current);
   }, [
+    isInitialized,
     options,
     selectedValues,
     name,

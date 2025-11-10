@@ -8,7 +8,6 @@ import {
 } from "@mui/material";
 import { FixedSizeList } from "react-window";
 import { useFilters } from "../../context/FiltersProvider";
-import { filterConfig } from "../../hooks/useFilterConfig";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
 import { useSearchParams } from "react-router-dom";
 
@@ -87,7 +86,13 @@ export default function FilterSelectVirtualized({
   debounceMs = 200,
   extraDeps = [],
 }) {
-  const { state, set, registerDeps } = useFilters();
+  const {
+    state,
+    set,
+    registerDeps,
+    config: filterConfig,
+    isInitialized,
+  } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const conf = filterConfig.find((f) => f.name === name);
@@ -127,6 +132,9 @@ export default function FilterSelectVirtualized({
   const valDebounceRef = useRef(null);
 
   useEffect(() => {
+    // CRITICAL: Don't validate during initialization
+    if (!isInitialized) return;
+
     if (valDebounceRef.current) clearTimeout(valDebounceRef.current);
 
     valDebounceRef.current = setTimeout(() => {
@@ -145,6 +153,7 @@ export default function FilterSelectVirtualized({
 
     return () => clearTimeout(valDebounceRef.current);
   }, [
+    isInitialized,
     options,
     selectedValue,
     name,
@@ -177,23 +186,27 @@ export default function FilterSelectVirtualized({
     }
   };
 
+  // Check if current value exists in options to prevent MUI warning
+  const valueExists = options.some((o) => o.id === selectedValue?.id);
+  const selectValue = valueExists
+    ? selectedValue.id
+    : options.length === 0
+    ? ""
+    : conf.defaultValue.id;
+
   return (
     <FormControl fullWidth disabled={loading}>
       <InputLabel>{conf.label}</InputLabel>
       <Select
-        value={selectedValue?.id ?? conf.defaultValue.id}
+        value={selectValue}
         onChange={handleChange}
         label={conf.label}
-        // Let MUI render its Menu and MenuList as usual, but override MenuList with our virtualized component.
         MenuProps={{
           PaperProps: {
             style: { overflow: "hidden" },
           },
-          // This is the correct hook: override the MenuList component
           MenuListProps: {
             component: MenuListVirtual,
-            // pass props down; MUI will pass children (MenuItems) into MenuListVirtual
-            // react-window sizing defaults work, but you can pass itemSize/height via MenuListProps if you want
           },
         }}
         endAdornment={loading && <CircularProgress size={20} />}

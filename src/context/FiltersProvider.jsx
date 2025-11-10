@@ -4,23 +4,18 @@ import React, {
   useMemo,
   useEffect,
   useRef,
+  useState,
 } from "react";
 import { useSearchParams } from "react-router-dom";
-import { filterConfig, resetDependencies } from "../hooks/useFilterConfig";
-
-function buildDefaultState() {
-  const state = {};
-  filterConfig.forEach((f) => {
-    state[f.name] = f.isMulti ? [{ ...f.defaultValue }] : { ...f.defaultValue };
-  });
-  return state;
-}
 
 const FiltersContext = createContext({
   state: {},
   set: () => {},
   reset: () => {},
   registerDeps: () => {},
+  config: [],
+  isInitialized: false,
+  isLoading: false,
 });
 
 function filtersReducer(state, action) {
@@ -28,7 +23,7 @@ function filtersReducer(state, action) {
     case "SET":
       return { ...state, [action.key]: action.value };
     case "RESET":
-      return buildDefaultState();
+      return action.defaultState;
     case "BATCH_SET":
       return { ...state, ...action.updates };
     default:
@@ -36,15 +31,32 @@ function filtersReducer(state, action) {
   }
 }
 
-export function FiltersProvider({ children }) {
+export function FiltersProvider({
+  children,
+  config,
+  resetDependencies = false,
+}) {
+  // Build default state from config
+  const buildDefaultState = () => {
+    const state = {};
+    config.forEach((f) => {
+      state[f.name] = f.isMulti
+        ? [{ ...f.defaultValue }]
+        : { ...f.defaultValue };
+    });
+    return state;
+  };
+
   const [state, dispatch] = React.useReducer(
     filtersReducer,
-    buildDefaultState()
+    null,
+    buildDefaultState
   );
   const [searchParams, setSearchParams] = useSearchParams();
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const depsRef = useRef(new Map());
   const requestIdRef = useRef(new Map());
-  const isInitializedRef = useRef(false);
   const isUpdatingRef = useRef(false);
   const pendingKeysRef = useRef(new Set());
 
@@ -60,6 +72,7 @@ export function FiltersProvider({ children }) {
     // Mark that we're updating and lock all affected keys
     isUpdatingRef.current = true;
     pendingKeysRef.current.add(key);
+    setIsLoading(true);
 
     // Build next state with parent update - DON'T dispatch yet
     const nextState = { ...state, [key]: value };
@@ -69,7 +82,7 @@ export function FiltersProvider({ children }) {
     const toProcess = [];
     const seen = new Set();
     const collectChildren = (parentKey) => {
-      for (const f of filterConfig) {
+      for (const f of config) {
         if (f.dependsOn?.includes(parentKey) && !seen.has(f.name)) {
           seen.add(f.name);
           toProcess.push(f.name);
@@ -85,7 +98,7 @@ export function FiltersProvider({ children }) {
     // Process children SEQUENTIALLY in dependency order, not parallel
     for (const childKey of toProcess) {
       console.log("🔄 Processing child:", childKey);
-      const f = filterConfig.find((fc) => fc.name === childKey);
+      const f = config.find((fc) => fc.name === childKey);
       if (!f) continue;
 
       const currentValue = state[childKey];
@@ -165,9 +178,10 @@ export function FiltersProvider({ children }) {
     // Clear the locks
     pendingKeysRef.current.clear();
     isUpdatingRef.current = false;
+    setIsLoading(false);
 
     // CRITICAL: Don't update URL params during initialization
-    if (!isInitializedRef.current) {
+    if (!isInitialized) {
       console.log("⏭️ Skipping URL update - still initializing");
       return;
     }
@@ -207,24 +221,30 @@ export function FiltersProvider({ children }) {
   };
 
   const reset = () => {
-    dispatch({ type: "RESET" });
+    dispatch({ type: "RESET", defaultState: buildDefaultState() });
     setSearchParams({});
   };
 
   // Initialize filters from URL only once on mount
   useEffect(() => {
-    if (isInitializedRef.current) return;
+    if (isInitialized) return;
 
     const hasParams = Array.from(searchParams.keys()).some((key) =>
-      filterConfig.some((f) => f.name === key)
+      config.some((f) => f.name === key)
     );
 
     if (!hasParams) {
-      isInitializedRef.current = true;
+      setIsInitialized(true);
       return;
     }
 
     console.log("🚀 Initializing from URL:", searchParams.toString());
+
+    // Set loading state during initialization
+    setIsLoading(true);
+
+    // Capture URL params immediately to prevent them from being lost
+    const urlParamsSnapshot = new URLSearchParams(searchParams);
 
     // Build a temporary state object from URL params to calculate parent values
     const urlState = {};
@@ -234,14 +254,14 @@ export function FiltersProvider({ children }) {
       const updates = {};
 
       // Sort filters by dependency depth (parents before children)
-      const sortedFilters = [...filterConfig].sort((a, b) => {
+      const sortedFilters = [...config].sort((a, b) => {
         const aDepth = a.dependsOn?.length || 0;
         const bDepth = b.dependsOn?.length || 0;
         return aDepth - bDepth;
       });
 
       for (const f of sortedFilters) {
-        const raw = searchParams.get(f.name);
+        const raw = urlParamsSnapshot.get(f.name);
         if (!raw) continue;
 
         console.log(`🔍 Initializing ${f.name} from URL:`, raw);
@@ -333,7 +353,27 @@ export function FiltersProvider({ children }) {
         dispatch({ type: "BATCH_SET", updates });
       }
 
-      isInitializedRef.current = true;
+      // CRITICAL: After initialization is complete, ensure URL hasn't been cleared
+      // This prevents race conditions where validation logic might clear the URL
+      const currentParams = new URLSearchParams(window.location.search);
+      let urlWasCleared = false;
+
+      for (const [key, value] of urlParamsSnapshot.entries()) {
+        if (config.some((f) => f.name === key) && !currentParams.has(key)) {
+          console.warn(
+            `⚠️ URL param ${key} was cleared during initialization, restoring...`
+          );
+          currentParams.set(key, value);
+          urlWasCleared = true;
+        }
+      }
+
+      if (urlWasCleared) {
+        setSearchParams(currentParams, { replace: true });
+      }
+
+      setIsInitialized(true);
+      setIsLoading(false);
       console.log("✅ Initialization complete");
     };
 
@@ -348,8 +388,11 @@ export function FiltersProvider({ children }) {
       registerDeps,
       isUpdating: isUpdatingRef.current,
       isPending: (key) => pendingKeysRef.current.has(key),
+      isInitialized,
+      isLoading,
+      config, // Expose config in context so components can access it
     }),
-    [state]
+    [state, config, isInitialized, isLoading]
   );
 
   return (
