@@ -62,14 +62,18 @@ function DashboardInner() {
         <Typography variant="body2" fontWeight="bold" gutterBottom>
           Current Filter State:
         </Typography>
+
         <Box
           component="pre"
           sx={{
-            bgcolor: "grey.100",
+            bgcolor: "background.paper",
+            color: "text.primary",
             p: 2,
             borderRadius: 1,
             overflow: "auto",
             fontSize: "0.875rem",
+            border: 1,
+            borderColor: "divider",
           }}
         >
           {JSON.stringify(state, null, 2)}
