@@ -3,7 +3,7 @@ import {
   filterFakeData,
   flattenWithDependsOn,
 } from "filtersprovider";
-import { filterConfig } from "../hooks/useFilterConfig.jsx";
+import { filterConfig } from "../config/filterConfig.js";
 
 // Configuration
 export const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
