@@ -1,39 +1,47 @@
 import { useMemo } from "react";
 import { useFilters } from "../../context/FiltersProvider";
 import { useFilterOptions } from "../../hooks/useFilterOptions";
+import { Box, Typography, Paper, Stack, CircularProgress } from "@mui/material";
 
 export default function FilterOptionsCountDisplay({ extraDeps = [] }) {
   const { state, config } = useFilters();
 
   return (
-    <div
-      style={{
-        padding: "1rem",
+    <Paper
+      sx={{
+        p: 2,
+        mt: 2,
+        borderRadius: 2,
+        lineHeight: 1.6,
         fontFamily: "monospace",
-        background: "#f7f7f7",
-        borderRadius: 8,
-        marginTop: "1rem",
-        lineHeight: 1.5,
+        backgroundColor: (theme) =>
+          theme.palette.mode === "dark"
+            ? theme.palette.background.paper
+            : theme.palette.grey[100],
       }}
     >
-      <h4 style={{ marginTop: 0 }}>🔍 Filter Options Debugger</h4>
-      {config.map((conf) => (
-        <FilterOptionsCount
-          key={conf.name}
-          conf={conf}
-          config={config}
-          state={state}
-          extraDeps={extraDeps}
-        />
-      ))}
-    </div>
+      <Typography variant="h6" gutterBottom>
+        🔍 Filter Options Debugger
+      </Typography>
+
+      <Stack spacing={1}>
+        {config.map((conf) => (
+          <FilterOptionsCount
+            key={conf.name}
+            conf={conf}
+            config={config}
+            state={state}
+            extraDeps={extraDeps}
+          />
+        ))}
+      </Stack>
+    </Paper>
   );
 }
 
 function FilterOptionsCount({ conf, config, state, extraDeps }) {
   const dependsOn = conf.dependsOn || [];
 
-  // Build parent values same way as in FilterSelect
   const parentValues = useMemo(
     () =>
       dependsOn.map((p) => {
@@ -61,9 +69,15 @@ function FilterOptionsCount({ conf, config, state, extraDeps }) {
   );
 
   return (
-    <div>
-      <strong>{conf.label}</strong>:{" "}
-      {loading ? "loading..." : `${options.length} options`}
-    </div>
+    <Box>
+      <Typography component="span" sx={{ fontWeight: "bold", mr: 1 }}>
+        {conf.label}:
+      </Typography>
+      {loading ? (
+        <CircularProgress size={16} sx={{ verticalAlign: "middle" }} />
+      ) : (
+        <Typography component="span">{options.length} options</Typography>
+      )}
+    </Box>
   );
 }
