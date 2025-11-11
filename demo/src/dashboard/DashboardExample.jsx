@@ -1,6 +1,6 @@
 import { Box, Typography } from "@mui/material";
-import { filterConfig } from "../hooks/useFilterConfig";
 import { BrowserRouter } from "react-router-dom";
+import { filterConfig } from "../config/filterConfig.js";
 import { useEffect } from "react";
 import {
   ActiveFiltersBar,

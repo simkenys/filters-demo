@@ -8,7 +8,7 @@ import {
   fetchRegion,
   fetchStore,
   fetchTeam,
-} from "../fetchers/fetchers";
+} from "../fetchers/fetchers.js";
 
 /**
  * Global option: whether child filters should reset when a parent filter changes.
