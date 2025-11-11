@@ -9,7 +9,13 @@ const SelectAuto = ({ filter: f, state }) => {
   if (f.hide && f.dependsOn?.length) {
     const directParentKey = f.dependsOn[f.dependsOn.length - 1]; // immediate parent
     const parentValue = state[directParentKey];
-    if (!parentValue || parentValue.id === -1) {
+
+    // Handle both object and array forms
+    const isAllSelected = Array.isArray(parentValue)
+      ? parentValue.some((v) => v.id === -1)
+      : parentValue?.id === -1;
+
+    if (!parentValue || isAllSelected) {
       return null; // hide this filter
     }
   }

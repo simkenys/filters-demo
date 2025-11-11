@@ -43,7 +43,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: [],
     fetcher: fetchContinent,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "country",
@@ -51,7 +51,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent"],
     fetcher: fetchCountry,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "region",
@@ -59,8 +59,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country"],
     fetcher: fetchRegion,
-
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "city",
@@ -68,7 +67,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region"],
     fetcher: fetchCity,
-    useBackend: false,
+    useBackend: true,
   },
   {
     name: "store",
@@ -76,7 +75,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city"],
     fetcher: fetchStore,
-    useBackend: false,
+    useBackend: true,
     isMulti: true,
   },
   {
@@ -85,7 +84,7 @@ export const filterConfig = [
     defaultValue: ALL_OPTION,
     dependsOn: ["continent", "country", "region", "city", "store"],
     fetcher: fetchDepartment,
-    useBackend: false,
+    useBackend: true,
     isMulti: true,
   },
   {
@@ -101,7 +100,9 @@ export const filterConfig = [
       "department",
     ],
     fetcher: fetchTeam,
-    useBackend: false,
+    useBackend: true,
+    isMulti: true,
+    isAutoComplete: true,
     hide: true,
   },
   {
@@ -118,7 +119,8 @@ export const filterConfig = [
       "team",
     ],
     fetcher: fetchEmployee,
-    useBackend: false,
+    useBackend: true,
+    isAutoComplete: true,
     hide: true,
   },
 ];

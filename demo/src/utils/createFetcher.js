@@ -1,6 +1,9 @@
-import { fetchFromBackend, filterFakeData } from "filtersprovider";
-import { filterConfig } from "../hooks/useFilterConfig";
-import { flattenWithDependsOn } from "./util";
+import {
+  fetchFromBackend,
+  filterFakeData,
+  flattenWithDependsOn,
+} from "filtersprovider";
+import { filterConfig } from "../hooks/useFilterConfig.jsx";
 
 // Configuration
 export const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
