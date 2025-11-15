@@ -121,29 +121,6 @@ export const filterConfig = [
       return [{ id: -1, label: "All Regions" }, ...data];
     },
   },
-  {
-    name: "city",
-    label: "City",
-    isMulti: true,
-    isAutoComplete: true,
-    defaultValue: { id: -1, label: "All Cities" },
-    dependsOn: ["country", "region"],
-    hide: true, // Hide until parent is selected
-    fetcher: async ({ parentValues, extraDeps }) => {
-      const [countryValues, regionValues] = parentValues;
-      const regionIds = regionValues.map((r) => r.id).filter((id) => id !== -1);
-
-      if (regionIds.length === 0) {
-        return [{ id: -1, label: "Select a region first" }];
-      }
-
-      const response = await fetch(
-        `/api/cities?regionId=\${regionIds.join(",")}`
-      );
-      const data = await response.json();
-      return [{ id: -1, label: "All Cities" }, ...data];
-    },
-  },
 ];
 ```
 
