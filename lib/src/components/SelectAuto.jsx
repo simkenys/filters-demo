@@ -4,7 +4,7 @@ import FilterAutoCompleteSelectVirtualized from "./filters/FilterAutoCompleteSel
 import FilterMultiSelectVirtualized from "./filters/FilterMultiSelectVirtualized";
 import FilterSelectVirtualized from "./filters/FilterSelectVirtualized";
 
-const SelectAuto = ({ filter: f, state }) => {
+const SelectAuto = ({ filter: f, state, extraDeps = [], debounceMs = 200 }) => {
   // ✅ Check if this filter should be hidden based on parent
   if (f.hide && f.dependsOn?.length) {
     const directParentKey = f.dependsOn[f.dependsOn.length - 1]; // immediate parent
@@ -26,14 +26,30 @@ const SelectAuto = ({ filter: f, state }) => {
       {f ? (
         f.isAutoComplete ? (
           f.isMulti ? (
-            <FilterAutoCompleteMultiSelectVirtualized name={f.name} />
+            <FilterAutoCompleteMultiSelectVirtualized
+              name={f.name}
+              extraDeps={extraDeps}
+              debounceMs={debounceMs}
+            />
           ) : (
-            <FilterAutoCompleteSelectVirtualized name={f.name} />
+            <FilterAutoCompleteSelectVirtualized
+              name={f.name}
+              extraDeps={extraDeps}
+              debounceMs={debounceMs}
+            />
           )
         ) : f.isMulti ? (
-          <FilterMultiSelectVirtualized name={f.name} />
+          <FilterMultiSelectVirtualized
+            name={f.name}
+            extraDeps={extraDeps}
+            debounceMs={debounceMs}
+          />
         ) : (
-          <FilterSelectVirtualized name={f.name} />
+          <FilterSelectVirtualized
+            name={f.name}
+            extraDeps={extraDeps}
+            debounceMs={debounceMs}
+          />
         )
       ) : null}
     </Box>
