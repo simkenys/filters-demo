@@ -1,6 +1,6 @@
 {
   "name": "filtersprovider",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Production-ready React filters library with URL sync, dependency management, and optionally MUI components",
   "type": "module",
   "main": "dist/index.cjs",
