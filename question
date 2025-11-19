@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { usePeriodFilter } from '../hooks/filters/viewFilters/usePeriodFilter';
-import { useFilterUpdater } from 'sdi-library';
 import { useToDoCategoryFilter } from '../hooks/filters/viewFilters/useToDoCategoryFilter';
 import { useCampaignFilter } from '../hooks/filters/viewFilters/useCampaignFilter';
 import { useScopeFilter } from '../hooks/filters/entityFilters/useScopeFilter';
@@ -18,10 +17,9 @@ import { useTodoTypeFilter } from '../hooks/filters/viewFilters/useToDoTypeFilte
 import { useToDoSubTypeFilter } from '../hooks/filters/viewFilters/useToDoSubTypeFilter';
 import { useGlobalStore } from './useGlobalStore';
 import useFetchUser from '../dataHooks/useFetchUser';
-import { useGeneratedFilters } from '../filterConfig/hooks/useGeneratedFilters';
 import { useGenerateFilter } from '../filterConfig/hooks/useGenerateFilter';
-import { useFilterConfig } from '../filterConfig/configs/filterConfig';
-import { useTransformedFilters } from '../filterConfig/hooks/useTransformedFilters';
+import useFilterUpdater from '../filterConfig/hooks/useFilterUpdater';
+import { filterConfigsMap } from '../filterConfig/filterConfig';
 
 //@ts-ignore
 const FilterStoreContext = createContext();
@@ -29,951 +27,253 @@ const FilterStoreContext = createContext();
 export const FilterStoreProvider = ({ children }) => {
   const { refogId } = useGlobalStore();
   const { user } = useFetchUser({ refogId });
+  const [userFunction, setUserFunction] = useState('default');
 
-  // const config = useFilterConfig();
-  // const newFilters = useGeneratedFilters(config);
-
-  const {
-    filterValue: period,
-    setFilterValue: setPeriod,
-    filterField: periodField,
-    filterData: periodData,
-    filterLoading: periodLoading,
-    filterError: periodError,
-    handleChange: handleChangePeriod,
-    defaultValue: defaultValuePeriod,
-  } = useGenerateFilter({
-    defaultValue: '2025',
+  // ---------------- Static hooks for all filters ----------------
+  const period = useGenerateFilter({
     filterFunction: usePeriodFilter,
     filterField: 'year',
+    defaultValue: '2025',
   });
-
-  const {
-    filterValue: toDoCat,
-    setFilterValue: setToDoCat,
-    filterField: toDoCatField,
-    filterData: toDoCatData,
-    filterLoading: toDoCatLoading,
-    filterError: toDoCatError,
-    handleChange: handleChangeToDoCat,
-    defaultValue: defaultValueToDoCat,
-  } = useGenerateFilter({
-    deps: [period],
-    depFields: [periodField],
-    isMulti: true,
+  const todocat = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
     filterFunction: useToDoCategoryFilter,
     filterField: 'todoCategoryKey',
-  });
-
-  const {
-    filterValue: toDoType,
-    setFilterValue: setToDoType,
-    filterField: toDoTypeField,
-    filterData: toDoTypeData,
-    filterLoading: toDoTypeLoading,
-    filterError: toDoTypeError,
-    handleChange: handleChangeToDoType,
-    defaultValue: defaultValueToDoType,
-  } = useGenerateFilter({
-    deps: [period, toDoCat],
-    depFields: [periodField, toDoCatField],
     isMulti: true,
+  });
+  const todotype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue],
+    depFields: ['year', 'todoCategoryKey'],
     filterFunction: useTodoTypeFilter,
     filterField: 'todoTypeKey',
-  });
-
-  const {
-    filterValue: toDoSubType,
-    setFilterValue: setToDoSubType,
-    filterField: toDoSubTypeField,
-    filterData: toDoSubTypeData,
-    filterLoading: toDoSubTypeLoading,
-    filterError: toDoSubTypeError,
-    handleChange: handleChangeToDoSubType,
-    defaultValue: defaultValueToDoSubType,
-  } = useGenerateFilter({
-    deps: [period, toDoCat, toDoType],
-    depFields: [periodField, toDoCatField, toDoTypeField],
     isMulti: true,
+  });
+  const todosubtype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue, todotype.filterValue],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey'],
     filterFunction: useToDoSubTypeFilter,
     filterField: 'todoSubTypeKey',
-  });
-
-  const {
-    filterValue: campaign,
-    setFilterValue: setCampaign,
-    filterField: campaignField,
-    filterData: campaignData,
-    filterLoading: campaignLoading,
-    filterError: campaignError,
-    handleChange: handleChangeCampaign,
-    handleManualUpdate: handleManualUpdateCampaign,
-    defaultValue: defaultValueCampaign,
-  } = useGenerateFilter({
-    deps: [period, toDoCat, toDoType, toDoSubType],
-    depFields: [periodField, toDoCatField, toDoTypeField, toDoSubTypeField],
     isMulti: true,
+  });
+  const campaign = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      todocat.filterValue,
+      todotype.filterValue,
+      todosubtype.filterValue,
+    ],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey', 'todoSubTypeKey'],
     filterFunction: useCampaignFilter,
     filterField: 'fkCampaign',
+    isMulti: true,
   });
 
-  const {
-    filterValue: scope,
-    setFilterValue: setScope,
-    filterField: scopeField,
-    filterData: scopeData,
-    filterLoading: scopeLoading,
-    filterError: scopeError,
-    handleChange: handleChangeScope,
-    defaultValue: defaultValueScope,
-  } = useGenerateFilter({
-    deps: [period],
-    depFields: [periodField],
+  const scope = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
     filterFunction: useScopeFilter,
     filterField: 'scopeKey',
   });
-
-  const {
-    filterValue: coverage,
-    setFilterValue: setCoverage,
-    filterField: coverageField,
-    filterData: coverageData,
-    filterLoading: coverageLoading,
-    filterError: coverageError,
-    handleChange: handleChangeCoverage,
-    defaultValue: defaultValueCoverage,
-  } = useGenerateFilter({
-    deps: [period, scope],
-    depFields: [periodField, scopeField],
+  const coverage = useGenerateFilter({
+    deps: [period.filterValue, scope.filterValue],
+    depFields: ['year', 'scopeKey'],
     filterFunction: useCoverageFilter,
     filterField: 'level4Cd',
   });
-
-  const {
-    filterValue: region,
-    setFilterValue: setRegion,
-    filterField: regionField,
-    filterData: regionData,
-    filterLoading: regionLoading,
-    filterError: regionError,
-    handleChange: handleChangeRegion,
-    defaultValue: defaultValueRegion,
-  } = useGenerateFilter({
-    deps: [period, scope, coverage],
-    depFields: [periodField, scopeField, coverageField],
+  const region = useGenerateFilter({
+    deps: [period.filterValue, scope.filterValue, coverage.filterValue],
+    depFields: ['year', 'scopeKey', 'level4Cd'],
     filterFunction: useRegionFilter,
     filterField: 'level5Cd',
   });
-
-  const {
-    filterValue: bc,
-    setFilterValue: setBc,
-    filterField: bcField,
-    filterData: bcData,
-    filterLoading: bcLoading,
-    filterError: bcError,
-    handleChange: handleChangeBc,
-    defaultValue: defaultValueBc,
-  } = useGenerateFilter({
-    deps: [period, scope, coverage, region],
-    depFields: [periodField, scopeField, coverageField, regionField],
+  const bc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      scope.filterValue,
+      coverage.filterValue,
+      region.filterValue,
+    ],
+    depFields: ['year', 'scopeKey', 'level4Cd', 'level5Cd'],
     filterFunction: useBCFilter,
     filterField: 'level6Cd',
   });
-
-  const {
-    filterValue: subBc,
-    setFilterValue: setSubBc,
-    filterField: subBcField,
-    filterData: subBcData,
-    filterLoading: subBcLoading,
-    filterError: subBcError,
-    handleChange: handleChangeSubBc,
-    defaultValue: defaultValueSubBc,
-  } = useGenerateFilter({
-    deps: [period, scope, coverage, region, bc],
-    depFields: [periodField, scopeField, coverageField, regionField, bcField],
+  const subbc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      scope.filterValue,
+      coverage.filterValue,
+      region.filterValue,
+      bc.filterValue,
+    ],
+    depFields: ['year', 'scopeKey', 'level4Cd', 'level5Cd', 'level6Cd'],
     filterFunction: useSubBCFilter,
     filterField: 'level7Cd',
   });
-
-  const {
-    filterValue: rm,
-    setFilterValue: setRm,
-    filterField: rmField,
-    filterData: rmData,
-    filterLoading: rmLoading,
-    filterError: rmError,
-    handleChange: handleChangeRm,
-    handleManualUpdate: handleManualUpdateRm,
-    defaultValue: defaultValueRm,
-  } = useGenerateFilter({
-    deps: [period, scope, coverage, region, bc, subBc],
+  const rm = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      scope.filterValue,
+      coverage.filterValue,
+      region.filterValue,
+      bc.filterValue,
+      subbc.filterValue,
+    ],
     depFields: [
-      periodField,
-      scopeField,
-      coverageField,
-      regionField,
-      bcField,
-      subBcField,
+      'year',
+      'scopeKey',
+      'level4Cd',
+      'level5Cd',
+      'level6Cd',
+      'level7Cd',
     ],
     filterFunction: useRMFilter,
     filterField: 'level8Cd',
   });
 
-  const {
-    filterValue: segment,
-    setFilterValue: setSegment,
-    filterField: segmentField,
-    filterData: segmentData,
-    filterLoading: segmentLoading,
-    filterError: segmentError,
-    handleChange: handleChangeSegment,
-    defaultValue: defaultValueSegment,
-  } = useGenerateFilter({
-    deps: [period],
-    depFields: [periodField],
-    isMulti: true,
+  const segment = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
     filterFunction: useSegmentFilter,
     filterField: 'segmentKey',
-  });
-
-  const {
-    filterValue: priority,
-    setFilterValue: setPriority,
-    filterField: priorityField,
-    filterData: priorityData,
-    filterLoading: priorityLoading,
-    filterError: priorityError,
-    handleChange: handleChangePriority,
-    defaultValue: defaultValuePriority,
-  } = useGenerateFilter({
-    deps: [period],
-    depFields: [periodField],
     isMulti: true,
+  });
+  const priority = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
     filterFunction: usePriorityFilter,
     filterField: 'priorityKey',
+    isMulti: true,
   });
-
-  const {
-    filterValue: mainCategory,
-    setFilterValue: setMainCategory,
-    filterField: mainCategoryField,
-    filterData: mainCategoryData,
-    filterLoading: mainCategoryLoading,
-    filterError: mainCategoryError,
-    handleChange: handleChangeMainCategory,
-    defaultValue: defaultValueMainCategory,
-  } = useGenerateFilter({
-    deps: [period],
-    depFields: [periodField],
+  const maincategory = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
     filterFunction: useMainCategoryFilter,
     filterField: 'mainCategoryKey',
   });
-
-  const {
-    filterValue: category,
-    setFilterValue: setCategory,
-    filterField: categoryField,
-    filterData: categoryData,
-    filterLoading: categoryLoading,
-    filterError: categoryError,
-    handleChange: handleChangeCategory,
-    defaultValue: defaultValueCategory,
-  } = useGenerateFilter({
-    deps: [period, mainCategory],
-    depFields: [periodField, mainCategoryField],
+  const category = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue],
+    depFields: ['year', 'mainCategoryKey'],
     filterFunction: useCategoryFilter,
     filterField: 'categoryKey',
   });
-
-  const {
-    filterValue: subCategory,
-    setFilterValue: setSubCategory,
-    filterField: subCategoryField,
-    filterData: subCategoryData,
-    filterLoading: subCategoryLoading,
-    filterError: subCategoryError,
-    handleChange: handleChangeSubCategory,
-    defaultValue: defaultValueSubCategory,
-  } = useGenerateFilter({
-    deps: [period, mainCategory, category],
-    depFields: [periodField, mainCategoryField, categoryField],
-    isMulti: true,
+  const subcategory = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue, category.filterValue],
+    depFields: ['year', 'mainCategoryKey', 'categoryKey'],
     filterFunction: useSubCategoryFilter,
     filterField: 'subCategoryKey',
+    isMulti: true,
   });
 
-  // const [filters, setFilters] = useTransformedFilters();
-  const [filters, setFilters] = useState([
-    { id: 'viewFilters', type: 'title', label: 'VIEW FILTERS' },
-    {
-      id: 'period',
-      type: 'select',
-      label: 'Year Deadline',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: period,
-      handleChange: handleChangePeriod,
-    },
-    {
-      id: 'todocat',
-      type: 'multiselect',
-      label: 'To Do Category',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: toDoCat,
-      handleChange: handleChangeToDoCat,
-    },
-    {
-      id: 'todotype',
-      type: 'multiselect',
-      label: 'To Do Type',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: toDoType,
-      handleChange: handleChangeToDoType,
-    },
-    {
-      id: 'todosubtype',
-      type: 'multiselect',
-      label: 'To Do SubType',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: toDoSubType,
-      handleChange: handleChangeToDoSubType,
-    },
-    {
-      id: 'campaign',
-      type: 'multiselect',
-      label: 'Campaign',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: campaign,
-      handleChange: handleChangeCampaign,
-      handleManualUpdate: handleManualUpdateCampaign,
-    },
-    { id: 'entityFilters', type: 'title', label: 'ENTITY FILTERS' },
-    {
-      id: 'scope',
-      type: 'select',
-      label: 'Scope',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: scope,
-      handleChange: handleChangeScope,
-    },
-    {
-      id: 'coverage',
-      type: 'select',
-      label: 'Coverage',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: coverage,
-      handleChange: handleChangeCoverage,
-    },
-    {
-      id: 'region',
-      type: 'select',
-      label: 'Region',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: region,
-      handleChange: handleChangeRegion,
-    },
-    {
-      id: 'bc',
-      type: 'select',
-      label: 'BC',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: bc,
-      handleChange: handleChangeBc,
-    },
-    {
-      id: 'subbc',
-      type: 'select',
-      label: 'Sub-BC',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: subBc,
-      handleChange: handleChangeSubBc,
-    },
-    {
-      id: 'rm',
-      type: 'select',
-      label: 'RM',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: rm,
-      handleChange: handleChangeRm,
-      handleManualUpdate: handleManualUpdateRm,
-    },
+  const hooksMap = {
+    period,
+    todocat,
+    todotype,
+    todosubtype,
+    campaign,
+    scope,
+    coverage,
+    region,
+    bc,
+    subbc,
+    rm,
+    segment,
+    priority,
+    maincategory,
+    category,
+    subcategory,
+  };
 
-    { id: 'clientFilters', type: 'title', label: 'CLIENT FILTERS' },
-    {
-      id: 'segment',
-      type: 'multiselect',
-      label: 'Segment',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: segment,
-      handleChange: handleChangeSegment,
-    },
-    {
-      id: 'priority',
-      type: 'multiselect',
-      label: 'Priority',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: priority,
-      handleChange: handleChangePriority,
-    },
-    {
-      id: 'mainCategory',
-      type: 'select',
-      label: 'Main Category',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: mainCategory,
-      handleChange: handleChangeMainCategory,
-    },
-    {
-      id: 'category',
-      type: 'select',
-      label: 'Category',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: category,
-      hideWhenNoParentValue: true,
-      handleChange: handleChangeCategory,
-      canHide: true,
-    },
-    {
-      id: 'subCategory',
-      type: 'multiselect',
-      label: 'SubCategory',
-      options: ['dummy'],
-      optionsLabels: ['Dummy'],
-      optionsSx: [{}],
-      state: subCategory,
-      hideWhenNoParentValue: true,
-      // setState: setSubCategory,
-      handleChange: handleChangeSubCategory,
-      canHide: true,
-    },
+  // ---------------- Dynamic config based on user.function ----------------
+  const [activeConfig, setActiveConfig] = useState(filterConfigsMap.default);
+  useEffect(() => {
+    const userFunc = user?.isImpersonating ? 'Admin' : 'default';
+    setUserFunction(userFunc);
+
+    if (userFunc === 'Admin' && filterConfigsMap.admin) {
+      console.log('admin');
+      setActiveConfig(filterConfigsMap.admin);
+    } else {
+      console.log('default');
+      setActiveConfig(filterConfigsMap.default);
+    }
+  }, [user, setUserFunction, setActiveConfig]);
+
+  // ---------------- Build filters array with real options & defaultValue state ----------------
+  const [filters, setFilters] = useState([]);
+  useEffect(() => {
+    const builtFilters = activeConfig.flatMap((section) => {
+      const title = {
+        id: section.section,
+        type: 'title',
+        label: section.section,
+      };
+      const sectionFilters = section.filters.map((f) => {
+        const hook = hooksMap[f.name];
+        const options = hook.filterData?.options || [];
+        const optionsLabels = hook.filterData?.optionsLabels || [];
+        const optionsSx = hook.filterData?.optionsSx || [];
+
+        // **State: use hook.filterValue if defined, else defaultValue**
+
+        // console.log(hook);
+        const state =
+          hook.filterValue !== undefined
+            ? hook.filterValue
+            : hook.isMulti
+            ? [hook.defaultValue]
+            : hook.defaultValue;
+
+        return {
+          id: f.id,
+          type: hook.isMulti ? 'multiselect' : 'select',
+          label: f.label,
+          state,
+          handleChange: hook.handleChange,
+          handleManualUpdate: hook.handleManualUpdate,
+          options,
+          optionsLabels,
+          optionsSx,
+          parentDeps: f.parentDeps || [],
+        };
+      });
+      return [title, ...sectionFilters];
+    });
+
+    setFilters(builtFilters);
+  }, [
+    activeConfig,
+    ...Object.values(hooksMap).map((h) => h.filterValue),
+    ...Object.values(hooksMap).map((h) => h.filterData),
   ]);
 
-  // console.log('newFilters', newFilters);
-  console.log('filters', filters);
+  // ---------------- Filter updater ----------------
+  Object.entries(hooksMap).forEach(([name, hook]) => {
+    useFilterUpdater(
+      hook.filterData,
+      name,
+      setFilters,
+      hook.filterValue,
+      hook.setFilterValue,
+      hook.defaultValue
+    );
+  });
 
-  //#region resetFilters
+  // ---------------- Reset filters ----------------
   const resetFilters = () => {
-    setScope(defaultValueScope);
-    setCoverage(defaultValueCoverage);
-    setRegion(defaultValueRegion);
-    setBc(defaultValueBc);
-    setSubBc(defaultValueSubBc);
-    setRm(defaultValueRm);
-
-    setSegment(defaultValueSegment);
-    setPriority(defaultValuePriority);
-    setMainCategory(defaultValueMainCategory);
-    setCategory(defaultValueCategory);
-    setSubCategory(defaultValueSubCategory);
-
-    setPeriod(defaultValuePeriod);
-    setToDoCat(defaultValueToDoCat);
-    setToDoType(defaultValueToDoType);
-    setToDoSubType(defaultValueToDoSubType);
-    setCampaign(defaultValueCampaign);
-  };
-  //#endregion
-
-  //#region useFilterUpdater - Add a line for each filter
-  const executeFilterUpdater = () => {
-    useFilterUpdater(scopeData, 'scope', setFilters, scope, setScope);
-    useFilterUpdater(
-      coverageData,
-      'coverage',
-      setFilters,
-      coverage,
-      setCoverage
-    );
-    useFilterUpdater(regionData, 'region', setFilters, region, setRegion);
-    useFilterUpdater(bcData, 'bc', setFilters, bc, setBc);
-    useFilterUpdater(subBcData, 'subbc', setFilters, subBc, setSubBc);
-    useFilterUpdater(rmData, 'rm', setFilters, rm, setRm);
-
-    useFilterUpdater(segmentData, 'segment', setFilters, segment, setSegment);
-    useFilterUpdater(
-      priorityData,
-      'priority',
-      setFilters,
-      priority,
-      setPriority
-    );
-    useFilterUpdater(
-      mainCategoryData,
-      'mainCategory',
-      setFilters,
-      mainCategory,
-      setMainCategory
-    );
-    useFilterUpdater(
-      categoryData,
-      'category',
-      setFilters,
-      category,
-      setCategory
-    );
-    useFilterUpdater(
-      subCategoryData,
-      'subCategory',
-      setFilters,
-      subCategory,
-      setSubCategory
-    );
-
-    useFilterUpdater(
-      periodData,
-      'period',
-      setFilters,
-      period,
-      setPeriod,
-      defaultValuePeriod
-    );
-    useFilterUpdater(toDoCatData, 'todocat', setFilters, toDoCat, setToDoCat);
-    useFilterUpdater(
-      toDoTypeData,
-      'todotype',
-      setFilters,
-      toDoType,
-      setToDoType
-    );
-    useFilterUpdater(
-      toDoSubTypeData,
-      'todosubtype',
-      setFilters,
-      toDoSubType,
-      setToDoSubType
-    );
-    useFilterUpdater(
-      campaignData,
-      'campaign',
-      setFilters,
-      campaign,
-      setCampaign
-    );
+    Object.values(hooksMap).forEach((h) => h.setFilterValue(h.defaultValue));
   };
 
-  executeFilterUpdater();
-  //#endregion
+  // ---------------- Loading / Error ----------------
+  const isLoading = Object.values(hooksMap).some((h) => h.filterLoading);
+  const isError = Object.values(hooksMap).some((h) => h.filterError);
 
-  //#region value export - Add a loading and error state for each filter
-  const value = {
-    filters,
-    setFilters,
-    resetFilters,
-    isLoading:
-      periodLoading ||
-      toDoCatLoading ||
-      campaignLoading ||
-      scopeLoading ||
-      coverageLoading ||
-      regionLoading ||
-      bcLoading ||
-      subBcLoading ||
-      rmLoading ||
-      segmentLoading ||
-      priorityLoading ||
-      mainCategoryLoading ||
-      categoryLoading ||
-      subCategoryLoading ||
-      toDoTypeLoading ||
-      campaignLoading ||
-      toDoSubTypeLoading,
-    isError:
-      periodError ||
-      toDoCatError ||
-      campaignError ||
-      scopeError ||
-      coverageError ||
-      regionError ||
-      bcError ||
-      subBcError ||
-      rmError ||
-      segmentError ||
-      priorityError ||
-      mainCategoryError ||
-      categoryError ||
-      subCategoryError ||
-      toDoTypeError ||
-      campaignError ||
-      toDoSubTypeError,
-  };
-  //#endregion
-
-  //#region return - Do not edit
   return (
-    <FilterStoreContext.Provider value={value}>
+    <FilterStoreContext.Provider
+      value={{ filters, setFilters, resetFilters, isLoading, isError }}>
       {children}
     </FilterStoreContext.Provider>
   );
-  //#endregion
 };
 
 export const useFilterStore = () => useContext(FilterStoreContext);
-
-
-import { useCategoryFilter } from '../../hooks/filters/clientFilters/useCategoryFilter';
-import { useMainCategoryFilter } from '../../hooks/filters/clientFilters/useMainCategoryFilter';
-import { usePriorityFilter } from '../../hooks/filters/clientFilters/usePriorityFilter';
-import { useSegmentFilter } from '../../hooks/filters/clientFilters/useSegmentFilter';
-import { useSubCategoryFilter } from '../../hooks/filters/clientFilters/useSubCategoryFilter';
-import { useBCFilter } from '../../hooks/filters/entityFilters/useBCFilter';
-import { useCoverageFilter } from '../../hooks/filters/entityFilters/useCoverageFilter';
-import { useRegionFilter } from '../../hooks/filters/entityFilters/useRegionFilter';
-import { useRMFilter } from '../../hooks/filters/entityFilters/useRMFilter';
-import { useScopeFilter } from '../../hooks/filters/entityFilters/useScopeFilter';
-import { useSubBCFilter } from '../../hooks/filters/entityFilters/useSubBCFilter';
-import { useCampaignFilter } from '../../hooks/filters/viewFilters/useCampaignFilter';
-import { usePeriodFilter } from '../../hooks/filters/viewFilters/usePeriodFilter';
-import { useToDoCategoryFilter } from '../../hooks/filters/viewFilters/useToDoCategoryFilter';
-import { useToDoSubTypeFilter } from '../../hooks/filters/viewFilters/useToDoSubTypeFilter';
-import { useTodoTypeFilter } from '../../hooks/filters/viewFilters/useToDoTypeFilter';
-
-export const useFilterConfig = () => {
-  const config = [
-    {
-      name: 'period',
-      defaultValue: '2025',
-      filterFunction: usePeriodFilter,
-      filterField: 'year',
-    },
-    {
-      name: 'toDoCat',
-      deps: ['period'],
-      isMulti: true,
-      filterFunction: useToDoCategoryFilter,
-      filterField: 'todoCategoryKey',
-    },
-    {
-      name: 'toDoType',
-      deps: ['period', 'toDoCat'],
-      isMulti: true,
-      filterFunction: useTodoTypeFilter,
-      filterField: 'todoTypeKey',
-    },
-    {
-      name: 'toDoSubType',
-      deps: ['period', 'toDoCat', 'toDoType'],
-      isMulti: true,
-      filterFunction: useToDoSubTypeFilter,
-      filterField: 'todoSubTypeKey',
-    },
-    {
-      name: 'campaign',
-      deps: ['period', 'toDoCat', 'toDoType', 'toDoSubType'],
-      isMulti: true,
-      filterFunction: useCampaignFilter,
-      filterField: 'fkCampaign',
-    },
-    {
-      name: 'scope',
-      deps: ['period'],
-      filterFunction: useScopeFilter,
-      filterField: 'scopeKey',
-    },
-    {
-      name: 'coverage',
-      deps: ['period', 'scope'],
-      filterFunction: useCoverageFilter,
-      filterField: 'level4Cd',
-    },
-    {
-      name: 'region',
-      deps: ['period', 'scope', 'coverage'],
-      filterFunction: useRegionFilter,
-      filterField: 'level5Cd',
-    },
-    {
-      name: 'bc',
-      deps: ['period', 'scope', 'coverage', 'region'],
-      filterFunction: useBCFilter,
-      filterField: 'level6Cd',
-    },
-    {
-      name: 'subBc',
-      deps: ['period', 'scope', 'coverage', 'region', 'bc'],
-      filterFunction: useSubBCFilter,
-      filterField: 'level7Cd',
-    },
-    {
-      name: 'rm',
-      deps: ['period', 'scope', 'coverage', 'region', 'bc', 'subBc'],
-      filterFunction: useRMFilter,
-      filterField: 'level8Cd',
-    },
-    {
-      name: 'segment',
-      deps: ['period'],
-      isMulti: true,
-      filterFunction: useSegmentFilter,
-      filterField: 'segmentKey',
-    },
-    {
-      name: 'priority',
-      deps: ['period'],
-      isMulti: true,
-      filterFunction: usePriorityFilter,
-      filterField: 'priorityKey',
-    },
-    {
-      name: 'mainCategory',
-      deps: ['period'],
-      filterFunction: useMainCategoryFilter,
-      filterField: 'mainCategoryKey',
-    },
-    {
-      name: 'category',
-      deps: ['period', 'mainCategory'],
-      filterFunction: useCategoryFilter,
-      filterField: 'categoryKey',
-    },
-    {
-      name: 'subCategory',
-      deps: ['period', 'mainCategory', 'category'],
-      isMulti: true,
-      filterFunction: useSubCategoryFilter,
-      filterField: 'subCategoryKey',
-    },
-  ];
-
-  return config;
-};
-
-
-import { useEffect } from "react";
-
-const useFilterUpdater = (
-  data,
-  id,
-  setFilters,
-  state,
-  setState,
-  defaultValue = null
-) => {
-  useEffect(() => {
-    if (data) {
-      let updatedState;
-      let filterType;
-
-      const updatedFilters = (prevFilters) =>
-        prevFilters.map((filter) => {
-          if (filter.id === id) {
-            const newOptions = data.options || [];
-            const newOptionsLabels = data.optionsLabels || [];
-            const newOptionsSx = data.optionsSx || [];
-
-            // Check if the current state is still valid
-            let isDisplayNone = false;
-            let isStateValid = false;
-
-            let foundIndex;
-
-            filterType = filter.type;
-
-            if (filterType === "multiselect") {
-              foundIndex = newOptions.findIndex(
-                (option) => option === state[0]
-              );
-            } else {
-              foundIndex = newOptions.findIndex((option) => option === state);
-            }
-
-            if (foundIndex !== -1) {
-              isDisplayNone = newOptionsSx[foundIndex].display === "none";
-            }
-
-            if (foundIndex !== -1) {
-              isStateValid = true;
-            }
-
-            if (isDisplayNone) {
-              isStateValid = false;
-            }
-
-            // Reset state if it is not valid
-            if (filterType === "multiselect") {
-              if (isStateValid) {
-                updatedState = state;
-              } else {
-                if (defaultValue !== null) {
-                  updatedState = [defaultValue];
-                } else {
-                  const index = newOptionsSx.findIndex(
-                    (option) => option?.display !== "none"
-                  );
-                  updatedState = newOptions?.[index] ? [newOptions[index]] : [];
-                }
-              }
-            } else {
-              if (isStateValid) {
-                updatedState = state;
-              } else {
-                if (defaultValue !== null) {
-                  updatedState = defaultValue;
-                } else {
-                  const index = newOptionsSx.findIndex(
-                    (option) => option?.display !== "none"
-                  );
-                  updatedState = newOptions?.[index] || "";
-                }
-              }
-            }
-            // Update the filter with new options and state
-            return {
-              ...filter,
-              state: updatedState,
-              options: newOptions,
-              optionsLabels: newOptionsLabels,
-              optionsSx: newOptionsSx,
-            };
-          }
-
-          return filter;
-        });
-
-      // apply the state changes
-      setFilters((prevFilters) => {
-        const newFilters = updatedFilters(prevFilters);
-        if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
-          setState(updatedState);
-        }
-
-        return newFilters;
-      });
-    }
-  }, [data, id, setFilters, state, setState]);
-
-  // useEffect(() => {
-  //   // Dependencies state updates
-  //   if (data?.newStateValuesDeps) {
-  //     console.log(data?.newStateValuesDeps);
-  //     data.newStateValuesDeps.forEach((d, index) => {
-  //       if (d?.length === 1) {
-  //         if (index === 3) {
-  //           console.log(d); // d === '14'
-  //           depSetStates[index]((prev) => (prev !== '14' ? '14' : prev)); // test works
-  //           // depSetStates[index]((prev) => (prev !== d ? d : prev)); // test does not work .. how ???
-  //         }
-  //       }
-  //     });
-  //   }
-  // }, [data.newStateValuesDeps, depSetStates]);
-};
-
-export default useFilterUpdater;
-
-
-import { useState, useEffect, useRef } from 'react';
-import { useGlobalStore } from '../../contexts/useGlobalStore';
-
-export const useGenerateFilter = ({
-  deps = [],
-  depFields = [],
-  defaultValue = '-1',
-  isMulti = false,
-  filterFunction,
-  filterField,
-}) => {
-  const { setLastChangedEntityFilter } = useGlobalStore();
-
-  const [filterDep, setFilterDep] = useState(deps);
-  const [filterFieldState, setFilterFieldState] = useState(filterField);
-  const [filterDepFields, setFilterDepFields] = useState(depFields);
-  const [filterValue, setFilterValue] = useState(
-    isMulti ? [defaultValue] : defaultValue
-  );
-
-  const prevDeps = useRef(deps);
-  const prevDepFields = useRef(depFields);
-
-  useEffect(() => {
-    if (
-      JSON.stringify(deps) !== JSON.stringify(prevDeps.current) ||
-      JSON.stringify(depFields) !== JSON.stringify(prevDepFields.current)
-    ) {
-      setFilterDep(deps);
-      setFilterDepFields(depFields);
-      prevDeps.current = deps;
-      prevDepFields.current = depFields;
-    }
-  }, [deps, depFields]);
-
-  const {
-    data: filterData,
-    isLoading: filterLoading,
-    isError: filterError,
-  } = filterFunction(filterDep, filterDepFields, filterFieldState);
-
-  const handleChange = (event) => {
-    const { value } = event.target;
-
-    if (
-      ['level4Cd', 'level5Cd', 'level6Cd', 'level7Cd', 'level8Cd'].includes(
-        filterFieldState
-      )
-    ) {
-      setLastChangedEntityFilter(filterFieldState);
-    }
-
-    if (isMulti) {
-      if (Array.isArray(value) && value[value.length - 1] === '-1') {
-        setFilterValue(['-1']);
-      } else if (Array.isArray(value)) {
-        const updatedValue = value.filter((val) => val !== '-1');
-        setFilterValue(updatedValue);
-      } else {
-        setFilterValue([value]);
-      }
-    } else {
-      setFilterValue(value);
-    }
-  };
-
-  const handleManualUpdate = (value) => {
-    if (['level8Cd'].includes(filterFieldState)) {
-      setLastChangedEntityFilter(filterFieldState);
-    }
-    setFilterValue(isMulti ? [value] : value);
-  };
-
-  return {
-    filterValue,
-    setFilterValue,
-    filterField: filterFieldState,
-    filterData,
-    filterLoading,
-    filterError,
-    handleChange,
-    handleManualUpdate,
-    defaultValue,
-  };
-};
