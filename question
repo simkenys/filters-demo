@@ -1,279 +1,447 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { usePeriodFilter } from '../hooks/filters/viewFilters/usePeriodFilter';
-import { useToDoCategoryFilter } from '../hooks/filters/viewFilters/useToDoCategoryFilter';
-import { useCampaignFilter } from '../hooks/filters/viewFilters/useCampaignFilter';
-import { useScopeFilter } from '../hooks/filters/entityFilters/useScopeFilter';
-import { useCoverageFilter } from '../hooks/filters/entityFilters/useCoverageFilter';
-import { useRegionFilter } from '../hooks/filters/entityFilters/useRegionFilter';
-import { useBCFilter } from '../hooks/filters/entityFilters/useBCFilter';
-import { useSubBCFilter } from '../hooks/filters/entityFilters/useSubBCFilter';
-import { useRMFilter } from '../hooks/filters/entityFilters/useRMFilter';
-import { useSegmentFilter } from '../hooks/filters/clientFilters/useSegmentFilter';
-import { usePriorityFilter } from '../hooks/filters/clientFilters/usePriorityFilter';
-import { useMainCategoryFilter } from '../hooks/filters/clientFilters/useMainCategoryFilter';
-import { useCategoryFilter } from '../hooks/filters/clientFilters/useCategoryFilter';
-import { useSubCategoryFilter } from '../hooks/filters/clientFilters/useSubCategoryFilter';
-import { useTodoTypeFilter } from '../hooks/filters/viewFilters/useToDoTypeFilter';
-import { useToDoSubTypeFilter } from '../hooks/filters/viewFilters/useToDoSubTypeFilter';
-import { useGlobalStore } from './useGlobalStore';
-import useFetchUser from '../dataHooks/useFetchUser';
-import { useGenerateFilter } from '../filterConfig/hooks/useGenerateFilter';
-import useFilterUpdater from '../filterConfig/hooks/useFilterUpdater';
-import { filterConfigsMap } from '../filterConfig/filterConfig';
+import React, { forwardRef, lazy, Suspense, useMemo } from "react";
+import {
+  Drawer,
+  Button,
+  Box,
+  Select,
+  MenuItem,
+  Checkbox,
+  FormControlLabel,
+  FormControl,
+  InputLabel,
+  ListItemIcon,
+  ListItemText,
+  Autocomplete,
+  TextField,
+  Divider,
+  Stack,
+  IconButton,
+  Tooltip,
+} from "@mui/material";
+import useWindowDimensions from "../../hooks/useWindowDimensions";
+// import {
+//   CloseOutlined,
+//   FilterAlt,
+//   FilterAltOff,
+// } from "@mui/icons-material";
+const CloseOutlined = lazy(() => import("@mui/icons-material/CloseOutlined"));
+const FilterAlt = lazy(() => import("@mui/icons-material/FilterAlt"));
+const FilterAltOff = lazy(() => import("@mui/icons-material/FilterAltOff"));
+import ExpandButton from "./ExpandButton";
+import { useBreakpoints } from "../..";
 
-//@ts-ignore
-const FilterStoreContext = createContext();
-
-export const FilterStoreProvider = ({ children }) => {
-  const { refogId } = useGlobalStore();
-  const { user } = useFetchUser({ refogId });
-  const [userFunction, setUserFunction] = useState('default');
-
-  // ---------------- Static hooks for all filters ----------------
-  const period = useGenerateFilter({
-    filterFunction: usePeriodFilter,
-    filterField: 'year',
-    defaultValue: '2025',
-  });
-  const todocat = useGenerateFilter({
-    deps: [period.filterValue],
-    depFields: ['year'],
-    filterFunction: useToDoCategoryFilter,
-    filterField: 'todoCategoryKey',
-    isMulti: true,
-  });
-  const todotype = useGenerateFilter({
-    deps: [period.filterValue, todocat.filterValue],
-    depFields: ['year', 'todoCategoryKey'],
-    filterFunction: useTodoTypeFilter,
-    filterField: 'todoTypeKey',
-    isMulti: true,
-  });
-  const todosubtype = useGenerateFilter({
-    deps: [period.filterValue, todocat.filterValue, todotype.filterValue],
-    depFields: ['year', 'todoCategoryKey', 'todoTypeKey'],
-    filterFunction: useToDoSubTypeFilter,
-    filterField: 'todoSubTypeKey',
-    isMulti: true,
-  });
-  const campaign = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      todocat.filterValue,
-      todotype.filterValue,
-      todosubtype.filterValue,
-    ],
-    depFields: ['year', 'todoCategoryKey', 'todoTypeKey', 'todoSubTypeKey'],
-    filterFunction: useCampaignFilter,
-    filterField: 'fkCampaign',
-    isMulti: true,
-  });
-
-  const scope = useGenerateFilter({
-    deps: [period.filterValue],
-    depFields: ['year'],
-    filterFunction: useScopeFilter,
-    filterField: 'scopeKey',
-  });
-  const coverage = useGenerateFilter({
-    deps: [period.filterValue, scope.filterValue],
-    depFields: ['year', 'scopeKey'],
-    filterFunction: useCoverageFilter,
-    filterField: 'level4Cd',
-  });
-  const region = useGenerateFilter({
-    deps: [period.filterValue, scope.filterValue, coverage.filterValue],
-    depFields: ['year', 'scopeKey', 'level4Cd'],
-    filterFunction: useRegionFilter,
-    filterField: 'level5Cd',
-  });
-  const bc = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      scope.filterValue,
-      coverage.filterValue,
-      region.filterValue,
-    ],
-    depFields: ['year', 'scopeKey', 'level4Cd', 'level5Cd'],
-    filterFunction: useBCFilter,
-    filterField: 'level6Cd',
-  });
-  const subbc = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      scope.filterValue,
-      coverage.filterValue,
-      region.filterValue,
-      bc.filterValue,
-    ],
-    depFields: ['year', 'scopeKey', 'level4Cd', 'level5Cd', 'level6Cd'],
-    filterFunction: useSubBCFilter,
-    filterField: 'level7Cd',
-  });
-  const rm = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      scope.filterValue,
-      coverage.filterValue,
-      region.filterValue,
-      bc.filterValue,
-      subbc.filterValue,
-    ],
-    depFields: [
-      'year',
-      'scopeKey',
-      'level4Cd',
-      'level5Cd',
-      'level6Cd',
-      'level7Cd',
-    ],
-    filterFunction: useRMFilter,
-    filterField: 'level8Cd',
-  });
-
-  const segment = useGenerateFilter({
-    deps: [period.filterValue],
-    depFields: ['year'],
-    filterFunction: useSegmentFilter,
-    filterField: 'segmentKey',
-    isMulti: true,
-  });
-  const priority = useGenerateFilter({
-    deps: [period.filterValue],
-    depFields: ['year'],
-    filterFunction: usePriorityFilter,
-    filterField: 'priorityKey',
-    isMulti: true,
-  });
-  const maincategory = useGenerateFilter({
-    deps: [period.filterValue],
-    depFields: ['year'],
-    filterFunction: useMainCategoryFilter,
-    filterField: 'mainCategoryKey',
-  });
-  const category = useGenerateFilter({
-    deps: [period.filterValue, maincategory.filterValue],
-    depFields: ['year', 'mainCategoryKey'],
-    filterFunction: useCategoryFilter,
-    filterField: 'categoryKey',
-  });
-  const subcategory = useGenerateFilter({
-    deps: [period.filterValue, maincategory.filterValue, category.filterValue],
-    depFields: ['year', 'mainCategoryKey', 'categoryKey'],
-    filterFunction: useSubCategoryFilter,
-    filterField: 'subCategoryKey',
-    isMulti: true,
-  });
-
-  const hooksMap = {
-    period,
-    todocat,
-    todotype,
-    todosubtype,
-    campaign,
-    scope,
-    coverage,
-    region,
-    bc,
-    subbc,
-    rm,
-    segment,
-    priority,
-    maincategory,
-    category,
-    subcategory,
-  };
-
-  // ---------------- Dynamic config based on user.function ----------------
-  const [activeConfig, setActiveConfig] = useState(filterConfigsMap.default);
-  useEffect(() => {
-    const userFunc = user?.isImpersonating ? 'Admin' : 'default';
-    setUserFunction(userFunc);
-
-    if (userFunc === 'Admin' && filterConfigsMap.admin) {
-      console.log('admin');
-      setActiveConfig(filterConfigsMap.admin);
-    } else {
-      console.log('default');
-      setActiveConfig(filterConfigsMap.default);
+const FilterPanel = forwardRef(
+  (
+    {
+      filters,
+      expanded,
+      setExpanded,
+      open,
+      setOpen,
+      isFooterVisible,
+      resetFilters,
+      hasActiveFilters,
+      mode,
+    },
+    ref
+  ) => {
+    if (!filters || filters.length === 0) {
+      console.warn("No filters passed as prop");
     }
-  }, [user, setUserFunction, setActiveConfig]);
 
-  // ---------------- Build filters array with real options & defaultValue state ----------------
-  const [filters, setFilters] = useState([]);
-  useEffect(() => {
-    const builtFilters = activeConfig.flatMap((section) => {
-      const title = {
-        id: section.section,
-        type: 'title',
-        label: section.section,
-      };
-      const sectionFilters = section.filters.map((f) => {
-        const hook = hooksMap[f.name];
-        const options = hook.filterData?.options || [];
-        const optionsLabels = hook.filterData?.optionsLabels || [];
-        const optionsSx = hook.filterData?.optionsSx || [];
+    const { isLg, isXl } = useBreakpoints();
 
-        // **State: use hook.filterValue if defined, else defaultValue**
+    const { height, width } = useWindowDimensions();
 
-        // console.log(hook);
-        const state =
-          hook.filterValue !== undefined
-            ? hook.filterValue
-            : hook.isMulti
-            ? [hook.defaultValue]
-            : hook.defaultValue;
+    const columnWidth = 350;
+    const columnGap = 4;
 
-        return {
-          id: f.id,
-          type: hook.isMulti ? 'multiselect' : 'select',
-          label: f.label,
-          state,
-          handleChange: hook.handleChange,
-          handleManualUpdate: hook.handleManualUpdate,
-          options,
-          optionsLabels,
-          optionsSx,
-          parentDeps: f.parentDeps || [],
-        };
-      });
-      return [title, ...sectionFilters];
-    });
+    const maxItemsPerColumn = useMemo(() => {
+      // 56 is the height 1 filterblock takes (including top and bottom padding, which the first and last only have 1 of the 2 off, so we need to add 16px)
+      // 16 is the padding of 8 of the first and the padding of 8 of the last item per column that we substracted too much
+      // 74 is the height loss from the top
+      // 45 is the height loss of the footer
+      const footerHeight = 0; //isFooterVisible ? 45 : 0;
+      return Math.floor((height - 74 - footerHeight + 16) / 56);
+    }, [height, width, isFooterVisible]);
 
-    setFilters(builtFilters);
-  }, [
-    activeConfig,
-    ...Object.values(hooksMap).map((h) => h.filterValue),
-    ...Object.values(hooksMap).map((h) => h.filterData),
-  ]);
+    const columns = useMemo(() => {
+      const cols = [];
+      let i = 0;
 
-  // ---------------- Filter updater ----------------
-  Object.entries(hooksMap).forEach(([name, hook]) => {
-    useFilterUpdater(
-      hook.filterData,
-      name,
-      setFilters,
-      hook.filterValue,
-      hook.setFilterValue,
-      hook.defaultValue
+      // Remove filters that only have 'All' from the filterPanel, whilst still keeping the placeholders and titles etc
+      const filtersToShow = filters?.filter(
+        (d) =>
+          !d.options ||
+          d.options.length > 1 ||
+          d.canHide === undefined ||
+          !d.canHide
+      );
+
+      if (isLg || isXl) {
+        while (i < filtersToShow.length) {
+          let myCols = filtersToShow.slice(i, i + maxItemsPerColumn);
+
+          let blancCount = 0;
+
+          // Check if the last item's type is 'title'
+          if (myCols.length > 0 && myCols[myCols.length - 1].type === "title") {
+            myCols = filtersToShow.slice(i, i + maxItemsPerColumn - 1);
+            myCols.push({ type: "blanc" });
+            blancCount++;
+          }
+
+          // Check if the first item's type is not 'title'
+          if (myCols.length > 0 && myCols[0].type !== "title") {
+            myCols = filtersToShow.slice(i, i + maxItemsPerColumn - 1);
+            myCols.unshift({ type: "blanc" });
+            blancCount++;
+          }
+
+          cols.push(myCols);
+
+          // Adjust the index to account for the additional items
+          i += maxItemsPerColumn - blancCount;
+        }
+      } else {
+        cols.push(filtersToShow);
+      }
+
+      return cols;
+    }, [filters, maxItemsPerColumn, width, height, isFooterVisible]);
+
+    const handleOnClickFiltersButton = () => {
+      setOpen(true);
+    };
+
+    const handleOnClickShowFiltersButton = () => {
+      setExpanded(!expanded);
+    };
+
+    const handleClickResetFilters = () => {
+      resetFilters();
+    };
+
+    return (
+      <Box>
+        <Stack
+          spacing={1}
+          direction="row"
+          justifyContent={"flex-end"}
+          alignItems={"center"}
+        >
+          <Tooltip
+            title={
+              "Show the status of all filters, usefull for screenshots etc."
+            }
+          >
+            <ExpandButton
+              expanded={expanded}
+              onClick={() => handleOnClickShowFiltersButton()}
+            />
+          </Tooltip>
+
+          <Tooltip title={"Reset filters"}>
+            <IconButton
+              disabled={!hasActiveFilters}
+              onClick={() => handleClickResetFilters()}
+            >
+              <Suspense fallback={null}>
+                <FilterAltOff
+                  sx={{
+                    fill: (theme) =>
+                      hasActiveFilters
+                        ? theme.palette.bnp.main
+                        : mode === "light"
+                        ? "#ccc"
+                        : "#555",
+                  }}
+                />
+              </Suspense>
+            </IconButton>
+          </Tooltip>
+
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => handleOnClickFiltersButton()}
+          >
+            {/* <FilterList /> Filters */}
+            <Suspense fallback={null}>
+              <FilterAlt />
+            </Suspense>{" "}
+            Filters
+          </Button>
+        </Stack>
+
+        <Drawer
+          ref={ref}
+          anchor="right"
+          open={open}
+          onClose={() => setOpen(false)}
+          sx={{
+            "& .MuiDrawer-paper": {
+              top: "42px",
+              height:
+                isLg || isXl ? "calc(100vh - 42px)" : "calc(100vh - 98px)",
+              display: "flex",
+              flexDirection: "row",
+              background: (theme) => theme.palette.background.paper,
+              p: isXl || isLg ? 2 : 0,
+              overflow: !isLg && !isXl ? "hidden" : "inherit",
+            },
+
+            "& .MuiBackdrop-root": {
+              top: "42px",
+            },
+
+            zIndex: 1202,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              height: "100%",
+              overflowY: "auto",
+              overflowX: isLg || isXl ? "inherit" : "auto",
+              flexGrow: isLg || isXl ? 1 : 0,
+              flexDirection: isLg || isXl ? "row" : "column",
+              alignItems: "flex-start",
+              gap: columnGap,
+              p: !isLg && !isXl ? 2 : 0,
+
+              // display: "flex",
+              // flexDirection: "row",
+              // gap: columnGap,
+              // // height: isLg || isXl ? "calc(100% - 45px)" : "auto",
+              // overflow: !isLg && !isXl ? "auto" : "inherit",
+              // flexGrow: !isLg && !isXl ? 1 : "inherit",
+              // p: !isLg && !isXl ? 2 : 0,
+            }}
+          >
+            {columns.map((col, colIndex) => (
+              <React.Fragment key={`col-${colIndex}`}>
+                <Box
+                  key={`col-${colIndex}`}
+                  sx={{
+                    width: columnWidth,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  {col.map((filter, idx) => (
+                    <Box key={filter.id ?? idx}>
+                      {filter.type === "blanc" && (
+                        <FormControl
+                          sx={{
+                            width: "100%",
+                            height: "40px",
+                            minHeight: "40px",
+                            maxHeight: "40px",
+                          }}
+                          size="small"
+                        >
+                          <Box sx={{ m: 0 }}>{""}</Box>
+                        </FormControl>
+                      )}
+                      {filter.type === "title" && (
+                        <FormControl
+                          sx={{
+                            width: "100%",
+                            height: "40px",
+                            minHeight: "40px",
+                            maxHeight: "40px",
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                          size="small"
+                        >
+                          <Box sx={{ m: 0, marginTop: "auto" }}>
+                            {filter?.label}
+                          </Box>
+                        </FormControl>
+                      )}
+                      {filter.type === "autocomplete" && (
+                        <FormControl
+                          sx={{
+                            width: "100%",
+                            height: "40px",
+                            minHeight: "40px",
+                            maxHeight: "40px",
+                          }}
+                          size="small"
+                        >
+                          <Autocomplete
+                            value={filter?.state}
+                            onChange={(event, newValue) =>
+                              filter?.handleChange(newValue)
+                            }
+                            options={filter?.options}
+                            getOptionLabel={(option) => {
+                              const index = filter?.options?.findIndex(
+                                (opt) => opt === option
+                              );
+                              return index !== -1
+                                ? filter?.optionsLabels[index]
+                                : "Error";
+                            }}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                variant="outlined"
+                                size="small"
+                                label={filter?.label}
+                                placeholder="Search an option"
+                                slotProps={{ inputLabel: { shrink: true } }}
+                              />
+                            )}
+                            sx={{ paddingTop: "2px" }}
+                          />
+                        </FormControl>
+                      )}
+
+                      {filter.type === "select" && (
+                        <FormControl
+                          sx={{
+                            width: "100%",
+                            height: "40px",
+                            minHeight: "40px",
+                            maxHeight: "40px",
+                          }}
+                          size="small"
+                        >
+                          <InputLabel>{filter?.label}</InputLabel>
+                          <Select
+                            value={filter?.state}
+                            label={filter?.label}
+                            onChange={(event) => filter?.handleChange(event)}
+                            displayEmpty
+                          >
+                            {filter?.options.map((opt, i) => (
+                              <MenuItem
+                                key={i}
+                                value={opt}
+                                sx={{ ...filter?.optionsSx?.[i] }}
+                              >
+                                {filter?.optionsLabels?.[i]}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                      {filter.type === "checkbox" && (
+                        <FormControlLabel
+                          control={<Checkbox />}
+                          label={filter.label}
+                        />
+                      )}
+                      {filter.type === "multiselect" && (
+                        <FormControl
+                          sx={{
+                            width: "100%",
+                            height: "40px",
+                            minHeight: "40px",
+                            maxHeight: "40px",
+                          }}
+                          size="small"
+                        >
+                          <InputLabel shrink>{filter?.label}</InputLabel>
+                          <Select
+                            multiple
+                            value={filter?.state}
+                            label={filter?.label}
+                            onChange={(event) => filter?.handleChange(event)}
+                            renderValue={(selected) =>
+                              selected?.length > 1
+                                ? `${selected.length} selected`
+                                : selected
+                                    ?.map(
+                                      (value) =>
+                                        filter?.optionsLabels[
+                                          filter?.options.indexOf(value)
+                                        ]
+                                    )
+                                    ?.join(", ")
+                            }
+                            displayEmpty
+                          >
+                            {filter?.options?.map((opt, i) => (
+                              <MenuItem
+                                key={i}
+                                value={opt}
+                                sx={{
+                                  padding: 0,
+                                  pr: 2,
+                                  ...filter?.optionsSx?.[i],
+                                }}
+                              >
+                                <ListItemIcon>
+                                  <Checkbox
+                                    checked={filter?.state?.includes(opt)}
+                                  />
+                                </ListItemIcon>
+                                <ListItemText>
+                                  {filter?.optionsLabels?.[i]}
+                                </ListItemText>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+                {columns?.length > 1 && colIndex < columns.length - 1 && (
+                  <Divider
+                    orientation="vertical"
+                    flexItem
+                    sx={{ mt: "12px" }}
+                  />
+                )}
+              </React.Fragment>
+            ))}
+          </Box>
+
+          <IconButton
+            onClick={() => handleClickResetFilters()}
+            disabled={!hasActiveFilters}
+            sx={{
+              position: "absolute",
+              top: 8,
+              right: 48,
+            }}
+          >
+            <Suspense fallback={null}>
+              <FilterAltOff
+                sx={{
+                  fill: (theme) =>
+                    hasActiveFilters
+                      ? theme.palette.bnp.main
+                      : mode === "light"
+                      ? "#ccc"
+                      : "#555",
+                }}
+              />
+            </Suspense>
+          </IconButton>
+
+          <IconButton
+            onClick={() => setOpen(false)}
+            sx={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+            }}
+          >
+            <Suspense fallback={null}>
+              <CloseOutlined />
+            </Suspense>
+          </IconButton>
+        </Drawer>
+      </Box>
     );
-  });
+  }
+);
 
-  // ---------------- Reset filters ----------------
-  const resetFilters = () => {
-    Object.values(hooksMap).forEach((h) => h.setFilterValue(h.defaultValue));
-  };
-
-  // ---------------- Loading / Error ----------------
-  const isLoading = Object.values(hooksMap).some((h) => h.filterLoading);
-  const isError = Object.values(hooksMap).some((h) => h.filterError);
-
-  return (
-    <FilterStoreContext.Provider
-      value={{ filters, setFilters, resetFilters, isLoading, isError }}>
-      {children}
-    </FilterStoreContext.Provider>
-  );
-};
-
-export const useFilterStore = () => useContext(FilterStoreContext);
+export default FilterPanel;
