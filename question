@@ -100,3 +100,590 @@ export const useGenerateFilter = ({
     compareType,
   };
 };
+
+import { useEffect } from "react";
+
+const useFilterUpdater = (
+  data,
+  id,
+  setFilters,
+  state,
+  setState,
+  defaultValue = null
+) => {
+  useEffect(() => {
+    if (!data) return;
+
+    let updatedState;
+    const updatedFilters = (prevFilters) =>
+      prevFilters.map((filter) => {
+        if (filter.id === id) {
+          const newOptions = data.options || [];
+          const newOptionsLabels = data.optionsLabels || [];
+          const newOptionsSx = data.optionsSx || [];
+
+          if (Array.isArray(state)) {
+            // multi select
+            const matchingStates = state.filter((d) => newOptions.includes(d));
+
+            if (matchingStates.length === 0) {
+              updatedState = defaultValue
+                ? [defaultValue]
+                : newOptions[0] ?? [""];
+            } else {
+              updatedState = matchingStates;
+            }
+          } else {
+            // single select
+            const isStateValid = newOptions.includes(state);
+
+            if (!isStateValid) {
+              updatedState = defaultValue ?? newOptions[0] ?? "";
+            } else {
+              updatedState = state;
+            }
+          }
+
+          return {
+            ...filter,
+            state: updatedState,
+            options: newOptions,
+            optionsLabels: newOptionsLabels,
+            optionsSx: newOptionsSx,
+          };
+        }
+        return filter;
+      });
+
+    setFilters((prevFilters) => {
+      const newFilters = updatedFilters(prevFilters);
+      if (JSON.stringify(state) !== JSON.stringify(updatedState))
+        setState(updatedState);
+
+      console.log("state", state);
+      console.log("updatedState", updatedState);
+
+      return newFilters;
+    });
+  }, [data, id, setFilters, state, setState, defaultValue]);
+};
+
+export default useFilterUpdater;
+
+
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { usePeriodFilter } from '../hooks/filters/viewFilters/usePeriodFilter';
+import { useToDoCategoryFilter } from '../hooks/filters/viewFilters/useToDoCategoryFilter';
+import { useCampaignFilter } from '../hooks/filters/viewFilters/useCampaignFilter';
+import { useScopeFilter } from '../hooks/filters/entityFilters/useScopeFilter';
+import { useCoverageFilter } from '../hooks/filters/entityFilters/useCoverageFilter';
+import { useRegionFilter } from '../hooks/filters/entityFilters/useRegionFilter';
+import { useBCFilter } from '../hooks/filters/entityFilters/useBCFilter';
+import { useSubBCFilter } from '../hooks/filters/entityFilters/useSubBCFilter';
+import { useRMFilter } from '../hooks/filters/entityFilters/useRMFilter';
+import { useSegmentFilter } from '../hooks/filters/clientFilters/useSegmentFilter';
+import { usePriorityFilter } from '../hooks/filters/clientFilters/usePriorityFilter';
+import { useMainCategoryFilter } from '../hooks/filters/clientFilters/useMainCategoryFilter';
+import { useCategoryFilter } from '../hooks/filters/clientFilters/useCategoryFilter';
+import { useSubCategoryFilter } from '../hooks/filters/clientFilters/useSubCategoryFilter';
+import { useTodoTypeFilter } from '../hooks/filters/viewFilters/useToDoTypeFilter';
+import { useToDoSubTypeFilter } from '../hooks/filters/viewFilters/useToDoSubTypeFilter';
+import { useGlobalStore } from './useGlobalStore';
+import useFetchUser from '../dataHooks/useFetchUser';
+import { useGenerateFilter } from '../filterConfig/hooks/useGenerateFilter';
+import { filterConfigsMap } from '../filterConfig/filterConfig';
+import { useFilterUpdater } from 'sdi-library';
+import { useClosedFilter } from '../hooks/filters/viewFilters/useClosedFilter';
+import { useBeforeDeadlineFilter } from '../hooks/filters/viewFilters/useBeforeDeadlineFilter';
+import { useSeaFilter } from '../hooks/filters/entityFilters/useSeaFilter';
+import { useSeaStatutoryFilter } from '../hooks/filters/entityFilters/useSeaStatutoryFilter';
+
+//@ts-ignore
+const FilterStoreContext = createContext();
+
+// Helper functions for URL param serialization
+const serializeFilterValue = (value, isMulti) => {
+  if (value === null || value === undefined) return null;
+  if (isMulti) {
+    // For multi-select, join array with commas
+    return Array.isArray(value) ? value.join(',') : String(value);
+  }
+  return String(value);
+};
+
+const deserializeFilterValue = (paramValue, isMulti, defaultValue) => {
+  if (!paramValue) return isMulti ? [defaultValue] : defaultValue;
+  if (isMulti) {
+    // For multi-select, split by comma
+    return paramValue.split(',').filter(Boolean);
+  }
+  // For boolean filters, parse as boolean
+  if (paramValue === 'true') return true;
+  if (paramValue === 'false') return false;
+  return paramValue;
+};
+
+export const FilterStoreProvider = ({ children }) => {
+  const { refogId, forcedLoadingArray, setForcedLoadingArray } =
+    useGlobalStore();
+  const { user } = useFetchUser({ refogId });
+  const [userFunction, setUserFunction] = useState('special');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isInitialMount = useRef(true);
+  const isApplyingUrlParams = useRef(false);
+  const hasInitialUrlParams = useRef(
+    Array.from(searchParams.keys()).length > 0
+  );
+
+  // ---------------- Static hooks for all filters ----------------
+  const period = useGenerateFilter({
+    id: 'period',
+    filterFunction: usePeriodFilter,
+    filterField: 'year',
+    defaultValue: '2025',
+  });
+  const todocat = useGenerateFilter({
+    id: 'todocat',
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useToDoCategoryFilter,
+    filterField: 'todoCategoryKey',
+    isMulti: true,
+  });
+  const todotype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue],
+    depFields: ['year', 'todoCategoryKey'],
+    filterFunction: useTodoTypeFilter,
+    filterField: 'todoTypeKey',
+    isMulti: true,
+  });
+  const todosubtype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue, todotype.filterValue],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey'],
+    filterFunction: useToDoSubTypeFilter,
+    filterField: 'todoSubTypeKey',
+    isMulti: true,
+  });
+  const campaign = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      todocat.filterValue,
+      todotype.filterValue,
+      todosubtype.filterValue,
+    ],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey', 'todoSubTypeKey'],
+    filterFunction: useCampaignFilter,
+    filterField: 'fkCampaign',
+    isMulti: true,
+  });
+  const closed = useGenerateFilter({
+    filterFunction: useClosedFilter,
+    filterField: 'closed',
+    compareType: 'bool',
+  });
+  const beforeDeadline = useGenerateFilter({
+    filterFunction: useBeforeDeadlineFilter,
+    filterField: 'beforeDeadline',
+    compareType: 'bool',
+  });
+
+  const coverage = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useCoverageFilter,
+    filterField: 'level4Cd',
+  });
+  const scope = useGenerateFilter({
+    deps: [period.filterValue, coverage.filterValue],
+    depFields: ['year', 'level4Cd'],
+    filterFunction: useScopeFilter,
+    filterField: 'scopeKey',
+  });
+  const seaStatutory = useGenerateFilter({
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue],
+    depFields: ['year', 'level4Cd', 'scopeKey'],
+    filterFunction: useSeaStatutoryFilter,
+    filterField: 'seaStatutoryKey',
+  });
+  const region = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+    ],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey'],
+    filterFunction: useRegionFilter,
+    filterField: 'level5Cd',
+  });
+  const bc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+    ],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd'],
+    filterFunction: useBCFilter,
+    filterField: 'level6Cd',
+  });
+  const subbc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+    ],
+    filterFunction: useSubBCFilter,
+    filterField: 'level7Cd',
+  });
+  const sea = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+      subbc.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+      'level7Cd',
+    ],
+    filterFunction: useSeaFilter,
+    filterField: 'seaparentKey',
+  });
+  const rm = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+      subbc.filterValue,
+      sea.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+      'level7Cd',
+      'seaparentKey',
+    ],
+    filterFunction: useRMFilter,
+    filterField: 'level8Cd',
+  });
+
+  const segment = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useSegmentFilter,
+    filterField: 'segmentKey',
+    isMulti: true,
+  });
+  const priority = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: usePriorityFilter,
+    filterField: 'priorityKey',
+    isMulti: true,
+  });
+  const maincategory = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useMainCategoryFilter,
+    filterField: 'mainCategoryKey',
+    compareType: 'bit',
+  });
+  const category = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue],
+    depFields: ['year', 'mainCategoryKey'],
+    filterFunction: useCategoryFilter,
+    filterField: 'categoryKey',
+    hideWhenNoParentValue: true,
+    compareType: 'bit',
+  });
+  const subcategory = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue, category.filterValue],
+    depFields: ['year', 'mainCategoryKey', 'categoryKey'],
+    filterFunction: useSubCategoryFilter,
+    filterField: 'subCategoryKey',
+    isMulti: true,
+    hideWhenNoParentValue: true,
+    compareType: 'bit',
+  });
+
+  const hooksMap = {
+    period,
+    todocat,
+    todotype,
+    todosubtype,
+    campaign,
+    closed,
+    beforeDeadline,
+    coverage,
+    scope,
+    seaStatutory,
+    region,
+    bc,
+    subbc,
+    sea,
+    rm,
+    segment,
+    priority,
+    maincategory,
+    category,
+    subcategory,
+  };
+
+  // ---------------- Reset filters function ----------------
+  const resetFilters = useCallback(() => {
+    Object.values(hooksMap).forEach((h) =>
+      h.setFilterValue(h.isMulti ? [h.defaultValue] : h.defaultValue)
+    );
+  }, []);
+
+  // ---------------- Apply URL params to filters on initial load ----------------
+  useEffect(() => {
+    if (!isInitialMount.current) return;
+
+    if (hasInitialUrlParams.current) {
+      console.log('Applying URL params on initial load');
+      isApplyingUrlParams.current = true;
+
+      Object.entries(hooksMap).forEach(([id, hook]) => {
+        const paramValue = searchParams.get(id);
+        if (paramValue !== null) {
+          const deserializedValue = deserializeFilterValue(
+            paramValue,
+            hook.isMulti,
+            hook.defaultValue
+          );
+          console.log(`Setting ${id} to:`, deserializedValue);
+          hook.setFilterValue(deserializedValue);
+        }
+      });
+
+      setTimeout(() => {
+        isApplyingUrlParams.current = false;
+      }, 150);
+    }
+
+    isInitialMount.current = false;
+  }, []);
+
+  // ---------------- Update URL when filters change ----------------
+  useEffect(() => {
+    if (isInitialMount.current || isApplyingUrlParams.current) return;
+
+    const newParams = new URLSearchParams();
+
+    Object.entries(hooksMap).forEach(([id, hook]) => {
+      const value =
+        hook.filterValue !== undefined
+          ? hook.filterValue
+          : hook.isMulti
+          ? [hook.defaultValue]
+          : hook.defaultValue;
+
+      const serializedValue = serializeFilterValue(value, hook.isMulti);
+
+      const defaultSerialized = serializeFilterValue(
+        hook.isMulti ? [hook.defaultValue] : hook.defaultValue,
+        hook.isMulti
+      );
+
+      if (serializedValue !== null && serializedValue !== defaultSerialized) {
+        newParams.set(id, serializedValue);
+      }
+    });
+
+    setSearchParams(newParams, { replace: true });
+  }, [...Object.values(hooksMap).map((h) => h.filterValue)]);
+
+  // ---------------- Dynamic config based on user.function ----------------
+  const [activeConfig, setActiveConfig] = useState(filterConfigsMap.special);
+  useEffect(() => {
+    // DON'T reset filters if we had initial URL params
+    if (!hasInitialUrlParams.current) {
+      console.log('Resetting filters - no initial URL params');
+      resetFilters();
+      setSearchParams({}, { replace: true });
+    } else {
+      console.log('Skipping reset - had initial URL params');
+    }
+
+    setForcedLoadingArray([]);
+
+    const userFunc = user?.currentUser?.securityRole;
+    setUserFunction(userFunc);
+
+    console.log('userFunc', userFunc);
+
+    switch (userFunc) {
+      case 'Special':
+        setActiveConfig(filterConfigsMap.special);
+        break;
+      case 'AM':
+        setActiveConfig(filterConfigsMap.am);
+        break;
+      case 'BCM':
+        setActiveConfig(filterConfigsMap.bcm);
+        break;
+      case 'RM':
+        setActiveConfig(filterConfigsMap.rm);
+        break;
+      default:
+        setActiveConfig(filterConfigsMap.special);
+        break;
+    }
+  }, [user, setUserFunction, setActiveConfig]);
+
+  // ---------------- Build filters array with real options & defaultValue state ----------------
+  const [filters, setFilters] = useState([]);
+
+  useEffect(() => {
+    const existingMap = Object.fromEntries(filters.map((f) => [f.id, f]));
+    const newFilters = [];
+
+    activeConfig.forEach((section) => {
+      const titleObj = {
+        id: `title-${section.section}`,
+        type: 'title',
+        label: section.section,
+      };
+      newFilters.push(titleObj);
+
+      section.filters.forEach((f) => {
+        const hook = hooksMap[f.id];
+        if (!hook) {
+          newFilters.push({
+            id: f.id,
+            type: 'select',
+            label: f.label,
+            state: undefined,
+            handleChange: () => {},
+            handleManualUpdate: () => {},
+            options: [],
+            optionsLabels: [],
+            optionsSx: [],
+            key: f.id,
+            hide: f.hide,
+            hideWhenNoParentValue: false,
+            filterField: '',
+            compareType: '',
+          });
+          return;
+        }
+
+        const existing = existingMap[f.id];
+
+        if (existing) {
+          existing.type = hook.isMulti ? 'multiselect' : 'select';
+          existing.label = f.label;
+          existing.state =
+            hook.filterValue !== undefined
+              ? hook.filterValue
+              : hook.isMulti
+              ? [hook.defaultValue]
+              : hook.defaultValue;
+          existing.handleChange = hook.handleChange;
+          existing.handleManualUpdate = hook.handleManualUpdate;
+          existing.options = hook.filterData?.options || [];
+          existing.optionsLabels = hook.filterData?.optionsLabels || [];
+          existing.optionsSx = hook.filterData?.optionsSx || [];
+          existing.key = f.id;
+          existing.hide = f.hide;
+          existing.hideWhenNoParentValue = hook.hideWhenNoParentValue;
+          existing.filterField = hook.filterField;
+          existing.compareType = hook.compareType;
+          newFilters.push(existing);
+        } else {
+          const newFilter = {
+            id: f.id,
+            type: hook.isMulti ? 'multiselect' : 'select',
+            label: f.label,
+            state:
+              hook.filterValue !== undefined
+                ? hook.filterValue
+                : hook.isMulti
+                ? [hook.defaultValue]
+                : hook.defaultValue,
+            handleChange: hook.handleChange,
+            handleManualUpdate: hook.handleManualUpdate,
+            options: hook.filterData?.options || [],
+            optionsLabels: hook.filterData?.optionsLabels || [],
+            optionsSx: hook.filterData?.optionsSx || [],
+            key: f.id,
+            hide: f.hide,
+            hideWhenNoParentValue: hook.hideWhenNoParentValue,
+            filterField: hook.filterField,
+            compareType: hook.compareType,
+          };
+          newFilters.push(newFilter);
+        }
+      });
+    });
+
+    setFilters(newFilters);
+  }, [
+    activeConfig,
+    ...Object.values(hooksMap).map((h) => h.filterData),
+    ...Object.values(hooksMap).map((h) => h.filterValue),
+    userFunction,
+  ]);
+
+  // ---------------- Filter updater ----------------
+  Object.entries(hooksMap).forEach(([id, hook]) => {
+    useFilterUpdater(
+      hook.filterData,
+      id,
+      setFilters,
+      hook.filterValue,
+      hook.setFilterValue,
+      hook.defaultValue
+    );
+  });
+
+  // ---------------- Loading / Error ----------------
+  const isLoading = Object.values(hooksMap).some((h) => h.filterLoading);
+  const isError = Object.values(hooksMap).some((h) => h.filterError);
+
+  return (
+    <FilterStoreContext.Provider
+      value={{ filters, setFilters, resetFilters, isLoading, isError }}>
+      {children}
+    </FilterStoreContext.Provider>
+  );
+};
+
+export const useFilterStore = () => useContext(FilterStoreContext);
