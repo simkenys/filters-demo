@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../../contexts/useGlobalStore';
+import { useSearchParams } from 'react-router-dom';
 
 export const useGenerateFilter = ({
   deps = [],
@@ -12,15 +13,33 @@ export const useGenerateFilter = ({
   compareType = 'int',
 }) => {
   const { setLastChangedEntityFilter } = useGlobalStore();
+  const [searchParams] = useSearchParams();
 
-  const [filterValue, setFilterValue] = useState(
-    isMulti ? [defaultValue] : defaultValue
-  );
+  // --- 1. Read URL override synchronously BEFORE useState runs ---
+  const paramValue = searchParams.get(filterField);
+  const initialValue = (() => {
+    if (paramValue === null) {
+      return isMulti ? [defaultValue] : defaultValue;
+    }
+
+    if (isMulti) {
+      return paramValue.split(',').filter(Boolean);
+    }
+
+    if (paramValue === 'true') return true;
+    if (paramValue === 'false') return false;
+
+    return paramValue;
+  })();
+
+  // --- 2. Initialize state WITH the correct URL value immediately ---
+  const [filterValue, setFilterValue] = useState(initialValue);
   const [filterDep, setFilterDep] = useState(deps);
   const [filterFieldState] = useState(filterField);
 
   const prevDeps = useRef(deps);
 
+  // --- 3. Watch dependency changes (same as before) ---
   useEffect(() => {
     if (JSON.stringify(deps) !== JSON.stringify(prevDeps.current)) {
       setFilterDep(deps);
@@ -28,12 +47,14 @@ export const useGenerateFilter = ({
     }
   }, [deps]);
 
+  // --- 4. Load options using the corrected initialValue ---
   const {
     data: filterData,
     isLoading: filterLoading,
     isError: filterError,
   } = filterFunction(filterDep, depFields, filterFieldState);
 
+  // --- 5. Handlers stay untouched ---
   const handleChange = (event) => {
     const value = event.target?.value ?? event;
 
@@ -51,12 +72,15 @@ export const useGenerateFilter = ({
       else if (Array.isArray(value))
         setFilterValue(value.filter((v) => v !== '-1'));
       else setFilterValue([value]);
-    } else setFilterValue(value);
+    } else {
+      setFilterValue(value);
+    }
   };
 
   const handleManualUpdate = (value) => {
     if (['level8Cd'].includes(filterFieldState))
       setLastChangedEntityFilter(filterFieldState);
+
     setFilterValue(isMulti ? [value] : value);
   };
 
