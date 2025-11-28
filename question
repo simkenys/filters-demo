@@ -58,6 +58,7 @@ export const FilterStoreProvider = ({ children }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const isInitialMount = useRef(true);
   const isApplyingUrlParams = useRef(false);
+  const hasAppliedUrlParams = useRef(false);
 
   // ---------------- Static hooks for all filters ----------------
   const period = useGenerateFilter({
@@ -281,40 +282,36 @@ export const FilterStoreProvider = ({ children }) => {
 
   // ---------------- Apply URL params to filters on initial load ----------------
   useEffect(() => {
-    if (!isInitialMount.current) return;
+    if (!isInitialMount.current || hasAppliedUrlParams.current) return;
     
-    // Check if there are any search params
     const hasParams = Array.from(searchParams.keys()).length > 0;
-    if (!hasParams) {
-      isInitialMount.current = false;
-      return;
+    
+    if (hasParams) {
+      isApplyingUrlParams.current = true;
+
+      Object.entries(hooksMap).forEach(([id, hook]) => {
+        const paramValue = searchParams.get(id);
+        if (paramValue !== null) {
+          const deserializedValue = deserializeFilterValue(
+            paramValue,
+            hook.isMulti,
+            hook.defaultValue
+          );
+          hook.setFilterValue(deserializedValue);
+        }
+      });
+
+      setTimeout(() => {
+        isApplyingUrlParams.current = false;
+        hasAppliedUrlParams.current = true;
+      }, 100);
     }
-
-    isApplyingUrlParams.current = true;
-
-    // Apply URL params to each filter
-    Object.entries(hooksMap).forEach(([id, hook]) => {
-      const paramValue = searchParams.get(id);
-      if (paramValue !== null) {
-        const deserializedValue = deserializeFilterValue(
-          paramValue,
-          hook.isMulti,
-          hook.defaultValue
-        );
-        hook.setFilterValue(deserializedValue);
-      }
-    });
-
-    // Small delay to ensure all filters are applied before updating URL
-    setTimeout(() => {
-      isApplyingUrlParams.current = false;
-      isInitialMount.current = false;
-    }, 100);
-  }, []); // Only run once on mount
+    
+    isInitialMount.current = false;
+  }, [searchParams]);
 
   // ---------------- Update URL when filters change ----------------
   useEffect(() => {
-    // Skip URL updates during initial mount or when applying URL params
     if (isInitialMount.current || isApplyingUrlParams.current) return;
 
     const newParams = new URLSearchParams();
@@ -325,7 +322,6 @@ export const FilterStoreProvider = ({ children }) => {
       
       const serializedValue = serializeFilterValue(value, hook.isMulti);
       
-      // Only add to URL if not default value
       const defaultSerialized = serializeFilterValue(
         hook.isMulti ? [hook.defaultValue] : hook.defaultValue,
         hook.isMulti
@@ -336,20 +332,23 @@ export const FilterStoreProvider = ({ children }) => {
       }
     });
 
-    // Update URL without navigation
     setSearchParams(newParams, { replace: true });
   }, [
-    // Watch all filter values
     ...Object.values(hooksMap).map((h) => h.filterValue),
   ]);
 
   // ---------------- Dynamic config based on user.function ----------------
   const [activeConfig, setActiveConfig] = useState(filterConfigsMap.special);
   useEffect(() => {
-    resetFilters(); // Reset filters
-    setForcedLoadingArray([]); // Reset loading states
-
     const userFunc = user?.currentUser?.securityRole;
+    
+    // ONLY reset if we don't have URL params on initial load
+    const hasParams = Array.from(searchParams.keys()).length > 0;
+    if (!hasParams || hasAppliedUrlParams.current) {
+      resetFilters();
+    }
+    
+    setForcedLoadingArray([]);
     setUserFunction(userFunc);
 
     console.log('userFunc', userFunc);
@@ -484,9 +483,8 @@ export const FilterStoreProvider = ({ children }) => {
     Object.values(hooksMap).forEach((h) =>
       h.setFilterValue(h.isMulti ? [h.defaultValue] : h.defaultValue)
     );
-    // Clear URL params when resetting
     setSearchParams({}, { replace: true });
-  }, [hooksMap, setSearchParams]);
+  }, [setSearchParams]);
 
   // ---------------- Loading / Error ----------------
   const isLoading = Object.values(hooksMap).some((h) => h.filterLoading);
