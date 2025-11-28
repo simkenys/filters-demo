@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { usePeriodFilter } from '../hooks/filters/viewFilters/usePeriodFilter';
 import { useToDoCategoryFilter } from '../hooks/filters/viewFilters/useToDoCategoryFilter';
 import { useCampaignFilter } from '../hooks/filters/viewFilters/useCampaignFilter';
@@ -28,10 +29,35 @@ import { useSeaStatutoryFilter } from '../hooks/filters/entityFilters/useSeaStat
 //@ts-ignore
 const FilterStoreContext = createContext();
 
+// Helper functions for URL param serialization
+const serializeFilterValue = (value, isMulti) => {
+  if (value === null || value === undefined) return null;
+  if (isMulti) {
+    // For multi-select, join array with commas
+    return Array.isArray(value) ? value.join(',') : String(value);
+  }
+  return String(value);
+};
+
+const deserializeFilterValue = (paramValue, isMulti, defaultValue) => {
+  if (!paramValue) return isMulti ? [defaultValue] : defaultValue;
+  if (isMulti) {
+    // For multi-select, split by comma
+    return paramValue.split(',').filter(Boolean);
+  }
+  // For boolean filters, parse as boolean
+  if (paramValue === 'true') return true;
+  if (paramValue === 'false') return false;
+  return paramValue;
+};
+
 export const FilterStoreProvider = ({ children }) => {
   const { refogId, setForcedLoadingArray } = useGlobalStore();
   const { user } = useFetchUser({ refogId });
   const [userFunction, setUserFunction] = useState('special');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isInitialMount = useRef(true);
+  const isApplyingUrlParams = useRef(false);
 
   // ---------------- Static hooks for all filters ----------------
   const period = useGenerateFilter({
@@ -253,6 +279,70 @@ export const FilterStoreProvider = ({ children }) => {
     subcategory,
   };
 
+  // ---------------- Apply URL params to filters on initial load ----------------
+  useEffect(() => {
+    if (!isInitialMount.current) return;
+    
+    // Check if there are any search params
+    const hasParams = Array.from(searchParams.keys()).length > 0;
+    if (!hasParams) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    isApplyingUrlParams.current = true;
+
+    // Apply URL params to each filter
+    Object.entries(hooksMap).forEach(([id, hook]) => {
+      const paramValue = searchParams.get(id);
+      if (paramValue !== null) {
+        const deserializedValue = deserializeFilterValue(
+          paramValue,
+          hook.isMulti,
+          hook.defaultValue
+        );
+        hook.setFilterValue(deserializedValue);
+      }
+    });
+
+    // Small delay to ensure all filters are applied before updating URL
+    setTimeout(() => {
+      isApplyingUrlParams.current = false;
+      isInitialMount.current = false;
+    }, 100);
+  }, []); // Only run once on mount
+
+  // ---------------- Update URL when filters change ----------------
+  useEffect(() => {
+    // Skip URL updates during initial mount or when applying URL params
+    if (isInitialMount.current || isApplyingUrlParams.current) return;
+
+    const newParams = new URLSearchParams();
+    
+    Object.entries(hooksMap).forEach(([id, hook]) => {
+      const value = hook.filterValue !== undefined ? hook.filterValue : 
+                    (hook.isMulti ? [hook.defaultValue] : hook.defaultValue);
+      
+      const serializedValue = serializeFilterValue(value, hook.isMulti);
+      
+      // Only add to URL if not default value
+      const defaultSerialized = serializeFilterValue(
+        hook.isMulti ? [hook.defaultValue] : hook.defaultValue,
+        hook.isMulti
+      );
+      
+      if (serializedValue !== null && serializedValue !== defaultSerialized) {
+        newParams.set(id, serializedValue);
+      }
+    });
+
+    // Update URL without navigation
+    setSearchParams(newParams, { replace: true });
+  }, [
+    // Watch all filter values
+    ...Object.values(hooksMap).map((h) => h.filterValue),
+  ]);
+
   // ---------------- Dynamic config based on user.function ----------------
   const [activeConfig, setActiveConfig] = useState(filterConfigsMap.special);
   useEffect(() => {
@@ -278,7 +368,7 @@ export const FilterStoreProvider = ({ children }) => {
         setActiveConfig(filterConfigsMap.rm);
         break;
       default:
-        setActiveConfig(filterConfigsMap.special); // Default case if userFunc doesn't match any case
+        setActiveConfig(filterConfigsMap.special);
         break;
     }
   }, [user, setUserFunction, setActiveConfig]);
@@ -287,14 +377,10 @@ export const FilterStoreProvider = ({ children }) => {
   const [filters, setFilters] = useState([]);
 
   useEffect(() => {
-    // Map existing filters by id for quick reuse
     const existingMap = Object.fromEntries(filters.map((f) => [f.id, f]));
-
-    // Build new filters array following config order
     const newFilters = [];
 
     activeConfig.forEach((section) => {
-      // title object (use stable id for title as well)
       const titleObj = {
         id: `title-${section.section}`,
         type: 'title',
@@ -304,7 +390,6 @@ export const FilterStoreProvider = ({ children }) => {
 
       section.filters.forEach((f) => {
         const hook = hooksMap[f.id];
-        // If for some reason hook is missing, create a placeholder (keeps order)
         if (!hook) {
           newFilters.push({
             id: f.id,
@@ -316,7 +401,6 @@ export const FilterStoreProvider = ({ children }) => {
             options: [],
             optionsLabels: [],
             optionsSx: [],
-            // parentDeps: f.parentDeps || [],
             key: f.id,
             hide: f.hide,
             hideWhenNoParentValue: false,
@@ -329,8 +413,6 @@ export const FilterStoreProvider = ({ children }) => {
         const existing = existingMap[f.id];
 
         if (existing) {
-          // Re-use the exact existing object to preserve identity in the array.
-          // Update its fields in-place so UI sees latest values while DOM node remains reused.
           existing.type = hook.isMulti ? 'multiselect' : 'select';
           existing.label = f.label;
           existing.state =
@@ -344,15 +426,13 @@ export const FilterStoreProvider = ({ children }) => {
           existing.options = hook.filterData?.options || [];
           existing.optionsLabels = hook.filterData?.optionsLabels || [];
           existing.optionsSx = hook.filterData?.optionsSx || [];
-          // existing.parentDeps = f.parentDeps || [];
-          existing.key = f.id; // stable key
+          existing.key = f.id;
           existing.hide = f.hide;
           existing.hideWhenNoParentValue = hook.hideWhenNoParentValue;
           existing.filterField = hook.filterField;
           existing.compareType = hook.compareType;
           newFilters.push(existing);
         } else {
-          // New filter — create object in correct position
           const newFilter = {
             id: f.id,
             type: hook.isMulti ? 'multiselect' : 'select',
@@ -368,7 +448,6 @@ export const FilterStoreProvider = ({ children }) => {
             options: hook.filterData?.options || [],
             optionsLabels: hook.filterData?.optionsLabels || [],
             optionsSx: hook.filterData?.optionsSx || [],
-            // parentDeps: f.parentDeps || [],
             key: f.id,
             hide: f.hide,
             hideWhenNoParentValue: hook.hideWhenNoParentValue,
@@ -380,14 +459,11 @@ export const FilterStoreProvider = ({ children }) => {
       });
     });
 
-    // Replace filters with new ordered array (we reused objects whenever possible)
     setFilters(newFilters);
   }, [
     activeConfig,
-    // depend on hook data and values so effect runs when they change
     ...Object.values(hooksMap).map((h) => h.filterData),
     ...Object.values(hooksMap).map((h) => h.filterValue),
-    // and also react to userFunction changes if you set it elsewhere
     userFunction,
   ]);
 
@@ -404,11 +480,13 @@ export const FilterStoreProvider = ({ children }) => {
   });
 
   // ---------------- Reset filters ----------------
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     Object.values(hooksMap).forEach((h) =>
       h.setFilterValue(h.isMulti ? [h.defaultValue] : h.defaultValue)
     );
-  };
+    // Clear URL params when resetting
+    setSearchParams({}, { replace: true });
+  }, [hooksMap, setSearchParams]);
 
   // ---------------- Loading / Error ----------------
   const isLoading = Object.values(hooksMap).some((h) => h.filterLoading);
@@ -423,321 +501,3 @@ export const FilterStoreProvider = ({ children }) => {
 };
 
 export const useFilterStore = () => useContext(FilterStoreContext);
-
-
-
-// Define multiple configs based on user.function
-export const filterConfigsMap = {
-    special: [
-        {
-            section: 'VIEW FILTERS',
-            filters: [
-                { id: 'period', label: 'Year Deadline' },
-                { id: 'todocat', label: 'To Do Category' },
-                { id: 'todotype', label: 'To Do Type' },
-                { id: 'todosubtype', label: 'To Do SubType' },
-                { id: 'campaign', label: 'Campaign' },
-                { id: 'closed', label: 'Open/Closed' },
-                { id: 'beforeDeadline', label: 'Before/After deadline' },
-            ],
-        },
-        {
-            section: 'ENTITY FILTERS',
-            filters: [
-                { id: 'coverage', label: 'Coverage' },
-                { id: 'scope', label: 'Scope' },
-                { id: 'seaStatutory', label: 'SEA/Statutory' },
-                { id: 'region', label: 'Region' },
-                { id: 'bc', label: 'BC/Zone' },
-                { id: 'subbc', label: 'Sub-BC/Sub-Zone' },
-                { id: 'sea', label: 'SEA' },
-                { id: 'rm', label: 'RM/Advisor' },
-            ],
-        },
-        {
-            section: 'CLIENT FILTERS',
-            filters: [
-                { id: 'segment', label: 'Segment' },
-                { id: 'priority', label: 'Priority' },
-                { id: 'maincategory', label: 'Main Category' },
-                { id: 'category', label: 'Category' },
-                { id: 'subcategory', label: 'SubCategory' },
-            ],
-        },
-    ],
-
-    am: [
-        {
-            section: 'VIEW FILTERS',
-            filters: [
-                { id: 'period', label: 'Year Deadline' },
-                { id: 'todocat', label: 'To Do Category' },
-                { id: 'todotype', label: 'To Do Type' },
-                { id: 'todosubtype', label: 'To Do SubType' },
-                { id: 'campaign', label: 'Campaign' },
-                { id: 'closed', label: 'Open/Closed' },
-                { id: 'beforeDeadline', label: 'Before/After deadline' },
-            ],
-        },
-        {
-            section: 'ENTITY FILTERS',
-            filters: [
-                { id: 'coverage', label: 'Coverage', hide: true },
-                { id: 'scope', label: 'Scope' },
-                { id: 'seaStatutory', label: 'SEA/Statutory' },
-                { id: 'region', label: 'Region' },
-                { id: 'bc', label: 'BC/Zone' },
-                { id: 'subbc', label: 'Sub-BC/Sub-Zone' },
-                { id: 'sea', label: 'SEA' },
-                { id: 'rm', label: 'RM/Advisor' },
-            ],
-        },
-        {
-            section: 'CLIENT FILTERS',
-            filters: [
-                { id: 'segment', label: 'Segment' },
-                { id: 'priority', label: 'Priority' },
-                { id: 'maincategory', label: 'Main Category' },
-                { id: 'category', label: 'Category' },
-                { id: 'subcategory', label: 'SubCategory' },
-            ],
-        },
-    ],
-
-    bcm: [
-        {
-            section: 'VIEW FILTERS',
-            filters: [
-                { id: 'period', label: 'Year Deadline' },
-                { id: 'todocat', label: 'To Do Category' },
-                { id: 'todotype', label: 'To Do Type' },
-                { id: 'todosubtype', label: 'To Do SubType' },
-                { id: 'campaign', label: 'Campaign' },
-                { id: 'closed', label: 'Open/Closed' },
-                { id: 'beforeDeadline', label: 'Before/After deadline' },
-            ],
-        },
-        {
-            section: 'ENTITY FILTERS',
-            filters: [
-                { id: 'coverage', label: 'Coverage', hide: true },
-                { id: 'scope', label: 'Scope' },
-                { id: 'seaStatutory', label: 'SEA/Statutory' },
-                { id: 'region', label: 'Region', hide: true },
-                { id: 'bc', label: 'BC/Zone' },
-                { id: 'subbc', label: 'Sub-BC/Sub-Zone' },
-                { id: 'sea', label: 'SEA' },
-                { id: 'rm', label: 'RM/Advisor' },
-            ],
-        },
-        {
-            section: 'CLIENT FILTERS',
-            filters: [
-                { id: 'segment', label: 'Segment' },
-                { id: 'priority', label: 'Priority' },
-                { id: 'maincategory', label: 'Main Category' },
-                { id: 'category', label: 'Category' },
-                { id: 'subcategory', label: 'SubCategory' },
-            ],
-        },
-    ],
-
-    rm: [
-        {
-            section: 'VIEW FILTERS',
-            filters: [
-                { id: 'period', label: 'Year Deadline' },
-                { id: 'todocat', label: 'To Do Category' },
-                { id: 'todotype', label: 'To Do Type' },
-                { id: 'todosubtype', label: 'To Do SubType' },
-                { id: 'campaign', label: 'Campaign' },
-                { id: 'closed', label: 'Open/Closed' },
-                { id: 'beforeDeadline', label: 'Before/After deadline' },
-            ],
-        },
-        {
-            section: 'ENTITY FILTERS',
-            filters: [
-                { id: 'coverage', label: 'Coverage', hide: true },
-                { id: 'scope', label: 'Scope', hide: true },
-                { id: 'seaStatutory', label: 'SEA/Statutory', hide: true },
-                { id: 'region', label: 'Region', hide: true },
-                { id: 'bc', label: 'BC/Zone', hide: true },
-                { id: 'subbc', label: 'Sub-BC/Sub-Zone' },
-                { id: 'sea', label: 'SEA', hide: true },
-                { id: 'rm', label: 'RM/Advisor' },
-            ],
-        },
-        {
-            section: 'CLIENT FILTERS',
-            filters: [
-                { id: 'segment', label: 'Segment' },
-                { id: 'priority', label: 'Priority' },
-                { id: 'maincategory', label: 'Main Category' },
-                { id: 'category', label: 'Category' },
-                { id: 'subcategory', label: 'SubCategory' },
-            ],
-        },
-    ],
-};
-
-
-
-import React, { useEffect, useState } from 'react';
-import {
-  BrowserRouter,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from 'react-router-dom';
-import Layout from './Layout';
-import useFetchUser from './dataHooks/useFetchUser';
-import useRoutes from './hooks/useRoutes';
-import { LoadingScreen, ScrollToTopOnRouteSwitch } from 'sdi-library';
-import { FilterStoreProvider } from './contexts/useFilterStore';
-import { useGlobalStore } from './contexts/useGlobalStore';
-import { SWRConfig } from 'swr';
-
-function localStorageProvider() {
-  const map = new Map(JSON.parse(localStorage.getItem('swr-cache') || '[]'));
-  window.addEventListener('beforeunload', () => {
-    const appCache = JSON.stringify(Array.from(map.entries()));
-    localStorage.setItem('swr-cache', appCache);
-  });
-  return map;
-}
-
-const AppContent = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { refogId } = useGlobalStore();
-
-  const { user, isLoadingUser, errorUser } = useFetchUser({ refogId });
-  const {
-    filteredRoutes,
-    homeRoute,
-    notFoundRoute,
-    noAccessRoute,
-    messageRoute,
-  } = useRoutes();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (isLoadingUser) {
-      setIsLoading(true);
-    } else if (errorUser) {
-      setError(errorUser);
-      setIsLoading(false);
-    } else if (user === undefined || user === null) {
-      setError('No data found for user');
-      setIsLoading(false);
-      // } else if (user.isAdmin && location.pathname === messageRoute.path) {
-    } else if (location.pathname === messageRoute.path) {
-      if (!user.isAdmin) setError('ERROR');
-      setIsLoading(false);
-    } else {
-      setIsLoading(false);
-    }
-  }, [isLoadingUser, errorUser, location, user]);
-
-  useEffect(() => {
-    if (error) {
-      console.error('Error with user: ', error);
-      navigate('/no-access');
-    }
-  }, [error, navigate]);
-
-  if (isLoading) return <LoadingScreen />;
-
-  if (error) {
-    return (
-      <Routes>
-        <Route
-          path={noAccessRoute.path}
-          element={<noAccessRoute.component />}
-        />
-      </Routes>
-    );
-  }
-
-  if (location.pathname === messageRoute.path) {
-    <Routes>
-      <Route path={messageRoute.path} element={<messageRoute.component />} />
-    </Routes>;
-  }
-
-  if (user?.currentUser?.securityRole === 'NoneForNow') {
-    return (
-      <FilterStoreProvider>
-        <Routes>
-          <Route
-            path={noAccessRoute.path}
-            element={<noAccessRoute.component />}
-          />
-          <Route path={homeRoute.path} element={<Layout />}>
-            <Route element={<homeRoute.component />}>
-              <Route index element={<></>} />
-            </Route>
-
-            <Route
-              path={notFoundRoute.path}
-              element={<notFoundRoute.component />}
-            />
-            <Route
-              path={messageRoute.path}
-              element={<messageRoute.component />}
-            />
-            <Route
-              path="*"
-              element={<Navigate to={homeRoute.path} replace />}
-            />
-          </Route>
-        </Routes>
-      </FilterStoreProvider>
-    );
-  }
-
-  return (
-    <FilterStoreProvider>
-      <Routes>
-        <Route
-          path={noAccessRoute.path}
-          element={<noAccessRoute.component />}
-        />
-        <Route path={homeRoute.path} element={<Layout />}>
-          <Route element={<homeRoute.component />}>
-            <Route index element={<></>} />
-          </Route>
-          {filteredRoutes.map((d) => (
-            <Route key={d.id} path={d.path} element={<d.component />}></Route>
-          ))}
-          <Route
-            path={notFoundRoute.path}
-            element={<notFoundRoute.component />}
-          />
-          <Route
-            path={messageRoute.path}
-            element={<messageRoute.component />}
-          />
-          <Route path="*" element={<Navigate to={homeRoute.path} replace />} />
-        </Route>
-      </Routes>
-    </FilterStoreProvider>
-  );
-};
-
-function App() {
-  return (
-    <SWRConfig value={{ provider: localStorageProvider }}>
-      <BrowserRouter>
-        <ScrollToTopOnRouteSwitch />
-        <AppContent />
-      </BrowserRouter>
-    </SWRConfig>
-  );
-}
-
-export default App;
