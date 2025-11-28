@@ -1,4 +1,4 @@
-// useFilterUpdater.js (FIXED - Issue #1)
+// useFilterUpdater.js (FIXED - Issue #1 properly)
 import { useEffect, useRef } from "react";
 
 const useFilterUpdater = (
@@ -12,6 +12,7 @@ const useFilterUpdater = (
 ) => {
   // Track previous options to detect when they actually change
   const prevOptionsRef = useRef(null);
+  const prevStateRef = useRef(state);
 
   useEffect(() => {
     if (!data) return;
@@ -41,19 +42,26 @@ const useFilterUpdater = (
                 updatedState = urlOverride;
               }
             } else {
-              // PRIORITY 2: Try to preserve current state
+              // PRIORITY 2: Try to preserve ALL current state values
               const matchingStates = state.filter((d) => newOptions.includes(d));
 
-              // FIX: Only reset if options changed AND no matches found
-              // If options didn't change, keep current state even if it seems invalid
-              if (matchingStates.length === 0 && optionsChanged) {
+              // KEY FIX: Check if ALL current values are still valid
+              // If all current values exist in new options, keep them regardless
+              const allCurrentValuesStillValid = state.every((d) => newOptions.includes(d));
+              
+              if (allCurrentValuesStillValid && state.length > 0) {
+                // All values are still valid, keep the entire current state
+                updatedState = state;
+              } else if (matchingStates.length > 0) {
+                // Some values are valid, keep only those
+                updatedState = matchingStates;
+              } else if (optionsChanged) {
+                // No matches and options changed, use default
                 updatedState = defaultValue
                   ? [defaultValue]
                   : newOptions[0] ?? [""];
-              } else if (matchingStates.length > 0) {
-                updatedState = matchingStates;
               } else {
-                // Options didn't change, keep current state
+                // No matches but options didn't change, keep current state
                 updatedState = state;
               }
             }
@@ -73,13 +81,14 @@ const useFilterUpdater = (
               // PRIORITY 2: Try to preserve current state
               const isStateValid = newOptions.includes(state);
 
-              // FIX: Only reset if options changed AND state is invalid
-              if (!isStateValid && optionsChanged) {
-                updatedState = defaultValue ?? newOptions[0] ?? "";
-              } else if (isStateValid) {
+              if (isStateValid) {
+                // Current state is valid, keep it
                 updatedState = state;
+              } else if (optionsChanged) {
+                // State invalid and options changed, use default
+                updatedState = defaultValue ?? newOptions[0] ?? "";
               } else {
-                // Options didn't change, keep current state
+                // State invalid but options didn't change, keep current state
                 updatedState = state;
               }
             }
@@ -98,10 +107,14 @@ const useFilterUpdater = (
 
     setFilters((prevFilters) => {
       const newFilters = updatedFilters(prevFilters);
+      
+      // Only update state if it actually changed
       if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
+        console.log(`[${id}] State update:`, { from: state, to: updatedState, reason: optionsChanged ? 'options changed' : 'validation' });
         setState(updatedState);
       }
 
+      prevStateRef.current = state;
       return newFilters;
     });
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
@@ -109,7 +122,7 @@ const useFilterUpdater = (
 
 export default useFilterUpdater;
 
-// useGenerateFilter.js (FIXED - Issue #3)
+// useGenerateFilter.js (FIXED - Issue #3 properly with debouncing)
 import { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../../contexts/useGlobalStore';
 import { useSearchParams } from 'react-router-dom';
@@ -197,16 +210,15 @@ export const useGenerateFilter = ({
     urlOverrideRef.current = null;
   };
 
-  // FIX #3: Use a callback-based state update to avoid render blocking
+  // FIX #3: Defer state update to next tick to not block navigation
   const handleManualUpdate = (value) => {
     if (['level8Cd'].includes(filterFieldState))
       setLastChangedEntityFilter(filterFieldState);
 
-    // Use functional update to ensure we don't block
-    setFilterValue((prev) => {
-      const newValue = isMulti ? [value] : value;
-      return newValue;
-    });
+    // Defer the update using setTimeout to ensure navigation isn't blocked
+    setTimeout(() => {
+      setFilterValue(isMulti ? [value] : value);
+    }, 0);
     
     urlOverrideRef.current = null;
   };
@@ -229,7 +241,7 @@ export const useGenerateFilter = ({
   };
 };
 
-// useFilterStore.jsx (FIXED - Issue #2 - Loading states)
+// useFilterStore.jsx (UPDATED with better URL param handling)
 import React, {
   createContext,
   useContext,
@@ -240,7 +252,53 @@ import React, {
   useMemo,
 } from 'react';
 import { useSearchParams } from 'react-router-dom';
-// ... all your other imports ...
+import { usePeriodFilter } from '../hooks/filters/viewFilters/usePeriodFilter';
+import { useToDoCategoryFilter } from '../hooks/filters/viewFilters/useToDoCategoryFilter';
+import { useCampaignFilter } from '../hooks/filters/viewFilters/useCampaignFilter';
+import { useScopeFilter } from '../hooks/filters/entityFilters/useScopeFilter';
+import { useCoverageFilter } from '../hooks/filters/entityFilters/useCoverageFilter';
+import { useRegionFilter } from '../hooks/filters/entityFilters/useRegionFilter';
+import { useBCFilter } from '../hooks/filters/entityFilters/useBCFilter';
+import { useSubBCFilter } from '../hooks/filters/entityFilters/useSubBCFilter';
+import { useRMFilter } from '../hooks/filters/entityFilters/useRMFilter';
+import { useSegmentFilter } from '../hooks/filters/clientFilters/useSegmentFilter';
+import { usePriorityFilter } from '../hooks/filters/clientFilters/usePriorityFilter';
+import { useMainCategoryFilter } from '../hooks/filters/clientFilters/useMainCategoryFilter';
+import { useCategoryFilter } from '../hooks/filters/clientFilters/useCategoryFilter';
+import { useSubCategoryFilter } from '../hooks/filters/clientFilters/useSubCategoryFilter';
+import { useTodoTypeFilter } from '../hooks/filters/viewFilters/useToDoTypeFilter';
+import { useToDoSubTypeFilter } from '../hooks/filters/viewFilters/useToDoSubTypeFilter';
+import { useGlobalStore } from './useGlobalStore';
+import useFetchUser from '../dataHooks/useFetchUser';
+import { useGenerateFilter } from '../filterConfig/hooks/useGenerateFilter';
+import { filterConfigsMap } from '../filterConfig/filterConfig';
+import { useFilterUpdater } from 'sdi-library';
+import { useClosedFilter } from '../hooks/filters/viewFilters/useClosedFilter';
+import { useBeforeDeadlineFilter } from '../hooks/filters/viewFilters/useBeforeDeadlineFilter';
+import { useSeaFilter } from '../hooks/filters/entityFilters/useSeaFilter';
+import { useSeaStatutoryFilter } from '../hooks/filters/entityFilters/useSeaStatutoryFilter';
+
+//@ts-ignore
+const FilterStoreContext = createContext();
+
+// Helper functions for URL param serialization
+const serializeFilterValue = (value, isMulti) => {
+  if (value === null || value === undefined) return null;
+  if (isMulti) {
+    return Array.isArray(value) ? value.join(',') : String(value);
+  }
+  return String(value);
+};
+
+const deserializeFilterValue = (paramValue, isMulti, defaultValue) => {
+  if (!paramValue) return isMulti ? [defaultValue] : defaultValue;
+  if (isMulti) {
+    return paramValue.split(',').filter(Boolean);
+  }
+  if (paramValue === 'true') return true;
+  if (paramValue === 'false') return false;
+  return paramValue;
+};
 
 export const FilterStoreProvider = ({ children }) => {
   const { refogId, forcedLoadingArray, setForcedLoadingArray } = useGlobalStore();
@@ -253,7 +311,202 @@ export const FilterStoreProvider = ({ children }) => {
     Array.from(searchParams.keys()).length > 0
   );
 
-  // ... all your filter hooks stay the same ...
+  // ... all your filter hooks ...
+  const period = useGenerateFilter({
+    filterFunction: usePeriodFilter,
+    filterField: 'year',
+    defaultValue: '2025',
+  });
+  const todocat = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useToDoCategoryFilter,
+    filterField: 'todoCategoryKey',
+    isMulti: true,
+  });
+  const todotype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue],
+    depFields: ['year', 'todoCategoryKey'],
+    filterFunction: useTodoTypeFilter,
+    filterField: 'todoTypeKey',
+    isMulti: true,
+  });
+  const todosubtype = useGenerateFilter({
+    deps: [period.filterValue, todocat.filterValue, todotype.filterValue],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey'],
+    filterFunction: useToDoSubTypeFilter,
+    filterField: 'todoSubTypeKey',
+    isMulti: true,
+  });
+  const campaign = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      todocat.filterValue,
+      todotype.filterValue,
+      todosubtype.filterValue,
+    ],
+    depFields: ['year', 'todoCategoryKey', 'todoTypeKey', 'todoSubTypeKey'],
+    filterFunction: useCampaignFilter,
+    filterField: 'fkCampaign',
+    isMulti: true,
+  });
+  const closed = useGenerateFilter({
+    filterFunction: useClosedFilter,
+    filterField: 'closed',
+    compareType: 'bool',
+  });
+  const beforeDeadline = useGenerateFilter({
+    filterFunction: useBeforeDeadlineFilter,
+    filterField: 'beforeDeadline',
+    compareType: 'bool',
+  });
+
+  const coverage = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useCoverageFilter,
+    filterField: 'level4Cd',
+  });
+  const scope = useGenerateFilter({
+    deps: [period.filterValue, coverage.filterValue],
+    depFields: ['year', 'level4Cd'],
+    filterFunction: useScopeFilter,
+    filterField: 'scopeKey',
+  });
+  const seaStatutory = useGenerateFilter({
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue],
+    depFields: ['year', 'level4Cd', 'scopeKey'],
+    filterFunction: useSeaStatutoryFilter,
+    filterField: 'seaStatutoryKey',
+  });
+  const region = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+    ],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey'],
+    filterFunction: useRegionFilter,
+    filterField: 'level5Cd',
+  });
+  const bc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+    ],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd'],
+    filterFunction: useBCFilter,
+    filterField: 'level6Cd',
+  });
+  const subbc = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+    ],
+    filterFunction: useSubBCFilter,
+    filterField: 'level7Cd',
+  });
+  const sea = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+      subbc.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+      'level7Cd',
+    ],
+    filterFunction: useSeaFilter,
+    filterField: 'seaparentKey',
+  });
+  const rm = useGenerateFilter({
+    deps: [
+      period.filterValue,
+      coverage.filterValue,
+      scope.filterValue,
+      seaStatutory.filterValue,
+      region.filterValue,
+      bc.filterValue,
+      subbc.filterValue,
+      sea.filterValue,
+    ],
+    depFields: [
+      'year',
+      'level4Cd',
+      'scopeKey',
+      'seaStatutoryKey',
+      'level5Cd',
+      'level6Cd',
+      'level7Cd',
+      'seaparentKey',
+    ],
+    filterFunction: useRMFilter,
+    filterField: 'level8Cd',
+  });
+
+  const segment = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useSegmentFilter,
+    filterField: 'segmentKey',
+    isMulti: true,
+  });
+  const priority = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: usePriorityFilter,
+    filterField: 'priorityKey',
+    isMulti: true,
+  });
+  const maincategory = useGenerateFilter({
+    deps: [period.filterValue],
+    depFields: ['year'],
+    filterFunction: useMainCategoryFilter,
+    filterField: 'mainCategoryKey',
+    compareType: 'bit',
+  });
+  const category = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue],
+    depFields: ['year', 'mainCategoryKey'],
+    filterFunction: useCategoryFilter,
+    filterField: 'categoryKey',
+    hideWhenNoParentValue: true,
+    compareType: 'bit',
+  });
+  const subcategory = useGenerateFilter({
+    deps: [period.filterValue, maincategory.filterValue, category.filterValue],
+    depFields: ['year', 'mainCategoryKey', 'categoryKey'],
+    filterFunction: useSubCategoryFilter,
+    filterField: 'subCategoryKey',
+    isMulti: true,
+    hideWhenNoParentValue: true,
+    compareType: 'bit',
+  });
 
   const hooksMap = {
     period,
@@ -278,14 +531,14 @@ export const FilterStoreProvider = ({ children }) => {
     subcategory,
   };
 
-  // ---------------- Reset filters function ----------------
+  // ... rest of the code stays the same ...
+
   const resetFilters = useCallback(() => {
     Object.values(hooksMap).forEach((h) =>
       h.setFilterValue(h.isMulti ? [h.defaultValue] : h.defaultValue)
     );
   }, []);
 
-  // ---------------- Apply URL params (no changes here) ----------------
   useEffect(() => {
     if (!isInitialMount.current) return;
 
@@ -314,7 +567,6 @@ export const FilterStoreProvider = ({ children }) => {
     isInitialMount.current = false;
   }, []);
 
-  // ---------------- Update URL when filters change ----------------
   useEffect(() => {
     if (isInitialMount.current || isApplyingUrlParams.current) return;
 
@@ -343,7 +595,6 @@ export const FilterStoreProvider = ({ children }) => {
     setSearchParams(newParams, { replace: true });
   }, [...Object.values(hooksMap).map((h) => h.filterValue)]);
 
-  // ---------------- Dynamic config (no changes) ----------------
   const [activeConfig, setActiveConfig] = useState(filterConfigsMap.special);
   useEffect(() => {
     if (!hasInitialUrlParams.current) {
@@ -380,7 +631,6 @@ export const FilterStoreProvider = ({ children }) => {
     }
   }, [user, setUserFunction, setActiveConfig]);
 
-  // ... filters array building stays the same ...
   const [filters, setFilters] = useState([]);
 
   useEffect(() => {
@@ -453,7 +703,7 @@ export const FilterStoreProvider = ({ children }) => {
             handleChange: hook.handleChange,
             handleManualUpdate: hook.handleManualUpdate,
             options: hook.filterData?.options || [],
-            optionsLabels: hook.filterData?.optionsLabels || [],
+            optionsLabels: hook.filterData?.optionsLabels || [];
             optionsSx: hook.filterData?.optionsSx || [],
             key: f.id,
             hide: f.hide,
@@ -474,7 +724,6 @@ export const FilterStoreProvider = ({ children }) => {
     userFunction,
   ]);
 
-  // ---------------- Filter updater ----------------
   Object.entries(hooksMap).forEach(([id, hook]) => {
     useFilterUpdater(
       hook.filterData,
@@ -487,18 +736,9 @@ export const FilterStoreProvider = ({ children }) => {
     );
   });
 
-  // FIX #2: Improved loading calculation with memoization
   const isLoading = useMemo(() => {
     const anyLoading = Object.values(hooksMap).some((h) => h.filterLoading);
     const forcedLoading = forcedLoadingArray.length > 0;
-    
-    console.log('Loading status:', { 
-      anyLoading, 
-      forcedLoading,
-      loadingFilters: Object.entries(hooksMap)
-        .filter(([_, h]) => h.filterLoading)
-        .map(([id]) => id)
-    });
     
     return anyLoading || forcedLoading;
   }, [
