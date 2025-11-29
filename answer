@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
 
 const useFilterUpdater = (
   data,
@@ -10,12 +9,9 @@ const useFilterUpdater = (
   defaultValue = null,
   urlOverride = null
 ) => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  
   // Track previous options to detect when they actually change
   const prevOptionsRef = useRef(null);
   const isInitialMount = useRef(true);
-  const hasValidatedUrl = useRef(false);
 
   useEffect(() => {
     // Skip initial mount to avoid unnecessary updates
@@ -43,6 +39,9 @@ const useFilterUpdater = (
 
     if (isLikelyLoading) {
       // Don't update anything - wait for real data to arrive
+      // console.log(
+      //   `[${id}] Skipping update - likely loading state (empty options)`
+      // );
       return;
     }
 
@@ -50,57 +49,24 @@ const useFilterUpdater = (
     const optionsChanged =
       JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
 
-    // Update the reference only after we've decided to process this change
-    prevOptionsRef.current = newOptions;
-
-    // --- VALIDATE URL OVERRIDE ONCE OPTIONS ARE AVAILABLE ---
-    if (urlOverride !== null && !hasValidatedUrl.current && newOptions.length > 0) {
-      hasValidatedUrl.current = true;
-      
+    // --- VALIDATE STATE WHEN NEW OPTIONS ARRIVE ---
+    if (optionsChanged && newOptions.length > 0) {
       if (Array.isArray(state)) {
         // Multi-select validation
-        const validValues = state.filter((val) => newOptions.includes(val));
         const invalidValues = state.filter((val) => !newOptions.includes(val));
-        
         if (invalidValues.length > 0) {
-          console.warn(
-            `[${id}] Invalid URL values removed:`,
-            invalidValues,
-            `\nAvailable options (${newOptions.length}):`,
-            newOptions.slice(0, 10),
-            newOptions.length > 10 ? `... and ${newOptions.length - 10} more` : ''
-          );
-          
-          // Clean up URL
-          const newParams = new URLSearchParams(searchParams);
-          if (validValues.length > 0) {
-            newParams.set(id, validValues.join(','));
-          } else {
-            newParams.delete(id);
-            console.warn(`[${id}] All URL values were invalid, reverting to default`);
-          }
-          setSearchParams(newParams, { replace: true });
+          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
         }
       } else {
         // Single-select validation
-        const isValid = newOptions.includes(state);
-        
-        if (!isValid) {
-          console.warn(
-            `[${id}] Invalid URL value: "${state}"`,
-            `\nAvailable options (${newOptions.length}):`,
-            newOptions.slice(0, 10),
-            newOptions.length > 10 ? `... and ${newOptions.length - 10} more` : '',
-            `\nReverting to default: "${defaultValue}"`
-          );
-          
-          // Clean up URL
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete(id);
-          setSearchParams(newParams, { replace: true });
+        if (!newOptions.includes(state)) {
+          console.warn(`[${id}] Invalid state value detected:`, state);
         }
       }
     }
+
+    // Update the reference only after we've decided to process this change
+    prevOptionsRef.current = newOptions;
 
     let updatedState;
 
@@ -194,9 +160,15 @@ const useFilterUpdater = (
 
     // Update local state if it changed (outside of setFilters callback)
     if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
+      // console.log(`[${id}] State update:`, {
+      //   from: state,
+      //   to: updatedState,
+      //   reason: optionsChanged ? "options changed" : "validation",
+      //   optionsLength: newOptions.length,
+      // });
       setState(updatedState);
     }
-  }, [data, id, setFilters, state, setState, defaultValue, urlOverride, searchParams, setSearchParams]);
+  }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
 
 export default useFilterUpdater;
