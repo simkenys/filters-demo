@@ -12,7 +12,6 @@ const useFilterUpdater = (
   // Track previous options to detect when they actually change
   const prevOptionsRef = useRef(null);
   const isInitialMount = useRef(true);
-  const lastValidationOptions = useRef(null);
 
   useEffect(() => {
     // Skip initial mount to avoid unnecessary updates
@@ -63,9 +62,12 @@ const useFilterUpdater = (
         );
         if (validUrlValues.length > 0) {
           updatedState = validUrlValues;
-        } else {
-          // URL values not in options yet, keep them temporarily
+        } else if (newOptions.length === 0) {
+          // URL values not in options yet (still loading), keep them temporarily
           updatedState = urlOverride;
+        } else {
+          // URL values are invalid, don't keep them - use default
+          updatedState = defaultValue ? [defaultValue] : newOptions.length > 0 ? [newOptions[0]] : [];
         }
       } else {
         // PRIORITY 2: Try to preserve ALL current state values
@@ -75,8 +77,8 @@ const useFilterUpdater = (
         if (allCurrentValuesStillValid) {
           // All values are still valid, keep the entire current state
           updatedState = state;
-        } else if (optionsChanged && newOptions.length > 0) {
-          // Options changed and we have new options
+        } else {
+          // Some or all values are invalid, filter to valid ones or use default
           const matchingStates = state.filter((d) => newOptions.includes(d));
 
           if (matchingStates.length > 0) {
@@ -90,9 +92,6 @@ const useFilterUpdater = (
               ? [newOptions[0]]
               : [];
           }
-        } else {
-          // Options didn't change or we have no new options, keep current state
-          updatedState = state;
         }
       }
     } else {
@@ -124,48 +123,13 @@ const useFilterUpdater = (
       }
     }
 
-    // --- VALIDATE AND CORRECT BEFORE APPLYING STATE ---
-    // Only validate if:
-    // 1. We have options
-    // 2. Options have actually changed (not just re-render)
-    // 3. These are different options than last validation (stabilized)
-    const shouldValidate = 
-      newOptions.length > 0 && 
-      optionsChanged &&
-      JSON.stringify(lastValidationOptions.current) !== JSON.stringify(newOptions);
-
-    let finalState = updatedState;
-
-    if (shouldValidate) {
-      lastValidationOptions.current = newOptions;
-      
-      if (Array.isArray(updatedState)) {
-        // Multi-select validation
-        const validValues = updatedState.filter((val) => newOptions.includes(val));
-        const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
-        
-        if (invalidValues.length > 0) {
-          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
-          // Keep valid values, or reset to default if none are valid
-          finalState = validValues.length > 0 ? validValues : [defaultValue];
-        }
-      } else {
-        // Single-select validation
-        if (!newOptions.includes(updatedState)) {
-          console.warn(`[${id}] Invalid state value detected:`, updatedState);
-          // Reset to default value
-          finalState = defaultValue;
-        }
-      }
-    }
-
-    // Update filters with new options and final corrected state
+    // Update filters with new options and calculated state
     setFilters((prevFilters) =>
       prevFilters.map((filter) => {
         if (filter.id === id) {
           return {
             ...filter,
-            state: finalState,
+            state: updatedState,
             options: newOptions,
             optionsLabels: newOptionsLabels,
             optionsSx: newOptionsSx,
@@ -176,8 +140,8 @@ const useFilterUpdater = (
     );
 
     // Update local state if it changed (outside of setFilters callback)
-    if (JSON.stringify(state) !== JSON.stringify(finalState)) {
-      setState(finalState);
+    if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
+      setState(updatedState);
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
