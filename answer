@@ -1,124 +1,161 @@
-import { useState, useEffect, useRef } from 'react';
-import { useGlobalStore } from '../../contexts/useGlobalStore';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useRef } from "react";
 
-export const useGenerateFilter = ({
-  id = 'dummy',
-  deps = [],
-  depFields = [],
-  defaultValue = '-1',
-  isMulti = false,
-  filterFunction,
-  filterField,
-  hideWhenNoParentValue = false,
-  compareType = 'int',
-}) => {
-  const { setLastChangedEntityFilter } = useGlobalStore();
-  const [searchParams, setSearchParams] = useSearchParams();
+const useFilterUpdater = (
+  data,
+  id,
+  setFilters,
+  state,
+  setState,
+  defaultValue = null,
+  urlOverride = null
+) => {
+  // Track previous options to detect when they actually change
+  const prevOptionsRef = useRef(null);
+  const isInitialMount = useRef(true);
 
-  // --- 1. Capture URL override ONCE on mount ---
-  const urlOverrideRef = useRef(null);
-  const hasCheckedUrl = useRef(false);
-
-  // Read searchParams in useEffect, not during render
   useEffect(() => {
-    if (!hasCheckedUrl.current) {
-      const paramValue = searchParams.get(id);
-      if (paramValue !== null) {
-        if (isMulti) {
-          urlOverrideRef.current = paramValue.split(',').filter(Boolean);
+    // Skip initial mount to avoid unnecessary updates
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      if (data && data.options) {
+        prevOptionsRef.current = data.options;
+      }
+      return;
+    }
+
+    // Don't process if data is not ready or is loading
+    if (!data) return;
+
+    const newOptions = data.options || [];
+    const newOptionsLabels = data.optionsLabels || [];
+    const newOptionsSx = data.optionsSx || [];
+
+    // CRITICAL FIX: Detect if options went from populated to empty
+    // This indicates a loading/fetching state, so we should preserve current state
+    const isLikelyLoading =
+      newOptions.length === 0 &&
+      prevOptionsRef.current !== null &&
+      prevOptionsRef.current.length > 0;
+
+    if (isLikelyLoading) {
+      // Don't update anything - wait for real data to arrive
+      return;
+    }
+
+    // Check if options actually changed (not just re-rendered)
+    const optionsChanged =
+      JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
+
+    // Update the reference only after we've decided to process this change
+    prevOptionsRef.current = newOptions;
+
+    let updatedState;
+    let hadInvalidUrlOverride = false;
+
+    // Calculate the updated state based on new options
+    if (Array.isArray(state)) {
+      // ===== MULTI SELECT =====
+
+      // PRIORITY 1: Try to preserve URL override if it's valid
+      if (urlOverride && Array.isArray(urlOverride)) {
+        const validUrlValues = urlOverride.filter((d) =>
+          newOptions.includes(d)
+        );
+        if (validUrlValues.length > 0) {
+          updatedState = validUrlValues;
+        } else if (newOptions.length === 0) {
+          // URL values not in options yet (still loading), keep them temporarily
+          updatedState = urlOverride;
         } else {
-          if (paramValue === 'true') urlOverrideRef.current = true;
-          else if (paramValue === 'false') urlOverrideRef.current = false;
-          else urlOverrideRef.current = paramValue;
+          // URL values are invalid, reset to default
+          console.warn(`[${id}] All URL values are invalid:`, urlOverride);
+          updatedState = defaultValue ? [defaultValue] : newOptions.length > 0 ? [newOptions[0]] : [];
+          hadInvalidUrlOverride = true;
+        }
+      } else {
+        // PRIORITY 2: Try to preserve ALL current state values
+        const allCurrentValuesStillValid =
+          state.length > 0 && state.every((d) => newOptions.includes(d));
+
+        if (allCurrentValuesStillValid) {
+          // All values are still valid, keep the entire current state
+          updatedState = state;
+        } else if (optionsChanged && newOptions.length > 0) {
+          // Options changed and we have new options
+          const matchingStates = state.filter((d) => newOptions.includes(d));
+
+          if (matchingStates.length > 0) {
+            // Keep only the valid values
+            updatedState = matchingStates;
+          } else {
+            // No matches, use default or first option
+            updatedState = defaultValue
+              ? [defaultValue]
+              : newOptions.length > 0
+              ? [newOptions[0]]
+              : [];
+          }
+        } else {
+          // Options didn't change or we have no new options, keep current state
+          updatedState = state;
         }
       }
-      hasCheckedUrl.current = true;
-    }
-  }, [searchParams, id, isMulti]);
-
-  // --- 2. Initialize state with default ---
-  const [filterValue, setFilterValue] = useState(
-    isMulti ? [defaultValue] : defaultValue
-  );
-  const [filterDep, setFilterDep] = useState(deps);
-  const [filterFieldState] = useState(filterField);
-
-  const prevDeps = useRef(deps);
-
-  // --- 3. Apply URL override immediately (before validation) ---
-  const hasAppliedUrlOverride = useRef(false);
-  useEffect(() => {
-    if (urlOverrideRef.current !== null && !hasAppliedUrlOverride.current) {
-      setFilterValue(urlOverrideRef.current);
-      hasAppliedUrlOverride.current = true;
-    }
-  }, []);
-
-  // --- 4. Watch dependency changes ---
-  useEffect(() => {
-    if (JSON.stringify(deps) !== JSON.stringify(prevDeps.current)) {
-      setFilterDep(deps);
-      prevDeps.current = deps;
-      // Clear urlOverride when dependencies change to allow normal state management
-      urlOverrideRef.current = null;
-    }
-  }, [deps]);
-
-  // --- 6. Load options ---
-  const {
-    data: filterData,
-    isLoading: filterLoading,
-    isError: filterError,
-  } = filterFunction(filterDep, depFields, filterFieldState);
-
-  // --- 7. Handlers ---
-  const handleChange = (event) => {
-    const value = event.target?.value ?? event;
-
-    if (
-      ['level4Cd', 'level5Cd', 'level6Cd', 'level7Cd', 'level8Cd'].includes(
-        filterFieldState
-      )
-    ) {
-      setLastChangedEntityFilter(filterFieldState);
-    }
-
-    if (isMulti) {
-      if (Array.isArray(value) && value[value.length - 1] === '-1')
-        setFilterValue(['-1']);
-      else if (Array.isArray(value))
-        setFilterValue(value.filter((v) => v !== '-1'));
-      else setFilterValue([value]);
     } else {
-      setFilterValue(value);
+      // ===== SINGLE SELECT =====
+
+      // PRIORITY 1: Try to preserve URL override if it's valid
+      if (urlOverride !== null) {
+        const isUrlValid = newOptions.includes(urlOverride);
+        if (isUrlValid) {
+          updatedState = urlOverride;
+        } else if (newOptions.length === 0) {
+          // URL value not in options yet (still loading), keep it temporarily
+          updatedState = urlOverride;
+        } else {
+          // URL value is invalid, reset to default
+          console.warn(`[${id}] Invalid URL value:`, urlOverride);
+          updatedState = defaultValue ?? newOptions[0] ?? "";
+          hadInvalidUrlOverride = true;
+        }
+      } else {
+        // PRIORITY 2: Try to preserve current state
+        const isStateValid = newOptions.includes(state);
+
+        if (isStateValid) {
+          // Current state is valid, keep it
+          updatedState = state;
+        } else if (optionsChanged && newOptions.length > 0) {
+          // State invalid and options changed, use default or first option
+          updatedState = defaultValue ?? newOptions[0] ?? "";
+        } else {
+          // State invalid but options didn't change or no new options, keep current state
+          updatedState = state;
+        }
+      }
     }
 
-    urlOverrideRef.current = null;
-  };
+    // Update filters with new options and calculated state
+    setFilters((prevFilters) =>
+      prevFilters.map((filter) => {
+        if (filter.id === id) {
+          return {
+            ...filter,
+            state: updatedState,
+            options: newOptions,
+            optionsLabels: newOptionsLabels,
+            optionsSx: newOptionsSx,
+          };
+        }
+        return filter;
+      })
+    );
 
-  const handleManualUpdate = (value) => {
-    if (['level8Cd'].includes(filterFieldState))
-      setLastChangedEntityFilter(filterFieldState);
-
-    setFilterValue(isMulti ? [value] : value);
-    urlOverrideRef.current = null;
-  };
-
-  return {
-    filterValue,
-    setFilterValue,
-    filterField: filterFieldState,
-    filterData,
-    filterLoading,
-    filterError,
-    handleChange,
-    handleManualUpdate,
-    setFilterDep,
-    defaultValue,
-    isMulti,
-    hideWhenNoParentValue,
-    compareType,
-    urlOverride: urlOverrideRef.current,
-  };
+    // Update local state if it changed (outside of setFilters callback)
+    // FORCE update if we corrected an invalid URL override, even if state looks the same
+    if (hadInvalidUrlOverride || JSON.stringify(state) !== JSON.stringify(updatedState)) {
+      setState(updatedState);
+    }
+  }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
+
+export default useFilterUpdater;
