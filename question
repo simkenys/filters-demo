@@ -167,6 +167,9 @@ const useFilterUpdater = (
     if (shouldValidate) {
       lastValidationOptions.current = newOptions;
       
+      let needsCorrection = false;
+      let correctedState = updatedState;
+      
       if (Array.isArray(updatedState)) {
         // Multi-select validation
         const validValues = updatedState.filter((val) => newOptions.includes(val));
@@ -175,38 +178,33 @@ const useFilterUpdater = (
         if (invalidValues.length > 0) {
           console.warn(`[${id}] Invalid state values detected:`, invalidValues);
           // Keep valid values, or reset to default if none are valid
-          const resetValue = validValues.length > 0 ? validValues : [defaultValue];
-          setState(resetValue);
-          setFilters((prevFilters) =>
-            prevFilters.map((filter) => {
-              if (filter.id === id) {
-                return {
-                  ...filter,
-                  state: resetValue,
-                };
-              }
-              return filter;
-            })
-          );
+          correctedState = validValues.length > 0 ? validValues : [defaultValue];
+          needsCorrection = true;
         }
       } else {
         // Single-select validation
         if (!newOptions.includes(updatedState)) {
           console.warn(`[${id}] Invalid state value detected:`, updatedState);
           // Reset to default value
-          setState(defaultValue);
-          setFilters((prevFilters) =>
-            prevFilters.map((filter) => {
-              if (filter.id === id) {
-                return {
-                  ...filter,
-                  state: defaultValue,
-                };
-              }
-              return filter;
-            })
-          );
+          correctedState = defaultValue;
+          needsCorrection = true;
         }
+      }
+
+      // Apply correction if needed
+      if (needsCorrection) {
+        setState(correctedState);
+        setFilters((prevFilters) =>
+          prevFilters.map((filter) => {
+            if (filter.id === id) {
+              return {
+                ...filter,
+                state: correctedState,
+              };
+            }
+            return filter;
+          })
+        );
       }
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
