@@ -169,11 +169,13 @@ const useFilterUpdater = (
       
       if (Array.isArray(updatedState)) {
         // Multi-select validation
+        const validValues = updatedState.filter((val) => newOptions.includes(val));
         const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
+        
         if (invalidValues.length > 0) {
           console.warn(`[${id}] Invalid state values detected:`, invalidValues);
-          // Reset to default value
-          const resetValue = [defaultValue];
+          // Keep valid values, or reset to default if none are valid
+          const resetValue = validValues.length > 0 ? validValues : [defaultValue];
           setState(resetValue);
           setFilters((prevFilters) =>
             prevFilters.map((filter) => {
