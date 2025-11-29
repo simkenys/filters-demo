@@ -40,9 +40,6 @@ const useFilterUpdater = (
 
     if (isLikelyLoading) {
       // Don't update anything - wait for real data to arrive
-      // console.log(
-      //   `[${id}] Skipping update - likely loading state (empty options)`
-      // );
       return;
     }
 
@@ -127,13 +124,48 @@ const useFilterUpdater = (
       }
     }
 
-    // Update filters with new options and calculated state
+    // --- VALIDATE AND CORRECT BEFORE APPLYING STATE ---
+    // Only validate if:
+    // 1. We have options
+    // 2. Options have actually changed (not just re-render)
+    // 3. These are different options than last validation (stabilized)
+    const shouldValidate = 
+      newOptions.length > 0 && 
+      optionsChanged &&
+      JSON.stringify(lastValidationOptions.current) !== JSON.stringify(newOptions);
+
+    let finalState = updatedState;
+
+    if (shouldValidate) {
+      lastValidationOptions.current = newOptions;
+      
+      if (Array.isArray(updatedState)) {
+        // Multi-select validation
+        const validValues = updatedState.filter((val) => newOptions.includes(val));
+        const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
+        
+        if (invalidValues.length > 0) {
+          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
+          // Keep valid values, or reset to default if none are valid
+          finalState = validValues.length > 0 ? validValues : [defaultValue];
+        }
+      } else {
+        // Single-select validation
+        if (!newOptions.includes(updatedState)) {
+          console.warn(`[${id}] Invalid state value detected:`, updatedState);
+          // Reset to default value
+          finalState = defaultValue;
+        }
+      }
+    }
+
+    // Update filters with new options and final corrected state
     setFilters((prevFilters) =>
       prevFilters.map((filter) => {
         if (filter.id === id) {
           return {
             ...filter,
-            state: updatedState,
+            state: finalState,
             options: newOptions,
             optionsLabels: newOptionsLabels,
             optionsSx: newOptionsSx,
@@ -144,41 +176,8 @@ const useFilterUpdater = (
     );
 
     // Update local state if it changed (outside of setFilters callback)
-    if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
-      // console.log(`[${id}] State update:`, {
-      //   from: state,
-      //   to: updatedState,
-      //   reason: optionsChanged ? "options changed" : "validation",
-      //   optionsLength: newOptions.length,
-      // });
-      setState(updatedState);
-    }
-
-    // --- VALIDATE FINAL STATE AFTER UPDATE ---
-    // Only validate if:
-    // 1. We have options
-    // 2. Options have actually changed (not just re-render)
-    // 3. These are different options than last validation (stabilized)
-    const shouldValidate = 
-      newOptions.length > 0 && 
-      optionsChanged &&
-      JSON.stringify(lastValidationOptions.current) !== JSON.stringify(newOptions);
-
-    if (shouldValidate) {
-      lastValidationOptions.current = newOptions;
-      
-      if (Array.isArray(updatedState)) {
-        // Multi-select validation
-        const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
-        if (invalidValues.length > 0) {
-          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
-        }
-      } else {
-        // Single-select validation
-        if (!newOptions.includes(updatedState)) {
-          console.warn(`[${id}] Invalid state value detected:`, updatedState);
-        }
-      }
+    if (JSON.stringify(state) !== JSON.stringify(finalState)) {
+      setState(finalState);
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
