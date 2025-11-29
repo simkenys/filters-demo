@@ -1,128 +1,174 @@
-// useFilterUpdater.js (FIXED - Issue #1 properly)
-import { useEffect, useRef } from "react";
+// useFilterUpdater.js - Refactored to NOT be a hook
+// This is now a utility function that returns the update logic
 
-const useFilterUpdater = (
+export const createFilterUpdateLogic = (
   data,
   id,
-  setFilters,
   state,
   setState,
   defaultValue = null,
-  urlOverride = null
+  urlOverride = null,
+  lastValidOptionsRef
 ) => {
-  // Track previous options to detect when they actually change
-  const prevOptionsRef = useRef(null);
-  const prevStateRef = useRef(state);
-
-  useEffect(() => {
-    if (!data) return;
+  // Return the logic that should run for this filter
+  return () => {
+    // CRITICAL: If data is undefined/null, we're in a loading state
+    // Don't do anything - preserve current state
+    if (!data || !data.options) {
+      console.log(`[${id}] No data, skipping update (preserving state during fetch)`);
+      return null; // Signal no update needed
+    }
 
     const newOptions = data.options || [];
     const newOptionsLabels = data.optionsLabels || [];
     const newOptionsSx = data.optionsSx || [];
 
-    // Check if options actually changed (not just re-rendered)
-    const optionsChanged = JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
-    prevOptionsRef.current = newOptions;
+    const optionsChanged = JSON.stringify(lastValidOptionsRef.current) !== JSON.stringify(newOptions);
+    lastValidOptionsRef.current = newOptions;
 
     let updatedState;
-    const updatedFilters = (prevFilters) =>
-      prevFilters.map((filter) => {
-        if (filter.id === id) {
-          if (Array.isArray(state)) {
-            // multi select
-            
-            // PRIORITY 1: Try to preserve URL override if it's valid
-            if (urlOverride && Array.isArray(urlOverride)) {
-              const validUrlValues = urlOverride.filter((d) => newOptions.includes(d));
-              if (validUrlValues.length > 0) {
-                updatedState = validUrlValues;
-              } else {
-                // URL values not in options yet, keep them temporarily
-                updatedState = urlOverride;
-              }
-            } else {
-              // PRIORITY 2: Try to preserve ALL current state values
-              const matchingStates = state.filter((d) => newOptions.includes(d));
 
-              // KEY FIX: Check if ALL current values are still valid
-              // If all current values exist in new options, keep them regardless
-              const allCurrentValuesStillValid = state.every((d) => newOptions.includes(d));
-              
-              if (allCurrentValuesStillValid && state.length > 0) {
-                // All values are still valid, keep the entire current state
-                updatedState = state;
-              } else if (matchingStates.length > 0) {
-                // Some values are valid, keep only those
-                updatedState = matchingStates;
-              } else if (optionsChanged) {
-                // No matches and options changed, use default
-                updatedState = defaultValue
-                  ? [defaultValue]
-                  : newOptions[0] ?? [""];
-              } else {
-                // No matches but options didn't change, keep current state
-                updatedState = state;
-              }
-            }
-          } else {
-            // single select
-            
-            // PRIORITY 1: Try to preserve URL override if it's valid
-            if (urlOverride !== null) {
-              const isUrlValid = newOptions.includes(urlOverride);
-              if (isUrlValid) {
-                updatedState = urlOverride;
-              } else {
-                // URL value not in options yet, keep it temporarily
-                updatedState = urlOverride;
-              }
-            } else {
-              // PRIORITY 2: Try to preserve current state
-              const isStateValid = newOptions.includes(state);
-
-              if (isStateValid) {
-                // Current state is valid, keep it
-                updatedState = state;
-              } else if (optionsChanged) {
-                // State invalid and options changed, use default
-                updatedState = defaultValue ?? newOptions[0] ?? "";
-              } else {
-                // State invalid but options didn't change, keep current state
-                updatedState = state;
-              }
-            }
-          }
-
-          return {
-            ...filter,
-            state: updatedState,
-            options: newOptions,
-            optionsLabels: newOptionsLabels,
-            optionsSx: newOptionsSx,
-          };
-        }
-        return filter;
-      });
-
-    setFilters((prevFilters) => {
-      const newFilters = updatedFilters(prevFilters);
+    if (Array.isArray(state)) {
+      // multi select
       
-      // Only update state if it actually changed
-      if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
-        console.log(`[${id}] State update:`, { from: state, to: updatedState, reason: optionsChanged ? 'options changed' : 'validation' });
-        setState(updatedState);
-      }
+      if (urlOverride && Array.isArray(urlOverride)) {
+        const validUrlValues = urlOverride.filter((d) => newOptions.includes(d));
+        if (validUrlValues.length > 0) {
+          updatedState = validUrlValues;
+        } else {
+          updatedState = urlOverride;
+        }
+      } else {
+        const matchingStates = state.filter((d) => newOptions.includes(d));
 
-      prevStateRef.current = state;
-      return newFilters;
-    });
-  }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
+        if (matchingStates.length > 0) {
+          updatedState = matchingStates;
+          console.log(`[${id}] Preserved ${matchingStates.length} values:`, matchingStates);
+        } else if (state.length > 0 && !optionsChanged) {
+          updatedState = state;
+          console.log(`[${id}] Keeping current state (options unchanged):`, state);
+        } else {
+          updatedState = defaultValue ? [defaultValue] : (newOptions[0] ? [newOptions[0]] : [""]);
+          console.log(`[${id}] Resetting to default:`, updatedState);
+        }
+      }
+    } else {
+      // single select
+      
+      if (urlOverride !== null) {
+        const isUrlValid = newOptions.includes(urlOverride);
+        if (isUrlValid) {
+          updatedState = urlOverride;
+        } else {
+          updatedState = urlOverride;
+        }
+      } else {
+        const isStateValid = newOptions.includes(state);
+
+        if (isStateValid) {
+          updatedState = state;
+        } else if (!optionsChanged) {
+          updatedState = state;
+        } else {
+          updatedState = defaultValue ?? newOptions[0] ?? "";
+        }
+      }
+    }
+
+    // Return the update package
+    return {
+      id,
+      updatedState,
+      newOptions,
+      newOptionsLabels,
+      newOptionsSx,
+      shouldUpdateState: JSON.stringify(state) !== JSON.stringify(updatedState)
+    };
+  };
 };
 
-export default useFilterUpdater;
+// New single hook that manages all filter updates
+export const useAllFilterUpdates = (hooksMap, setFilters) => {
+  const { useEffect, useRef } = require('react');
+  
+  // Create refs for each filter to track last valid options
+  const lastValidOptionsRefs = useRef({});
+  
+  // Initialize refs for all filters
+  Object.keys(hooksMap).forEach(id => {
+    if (!lastValidOptionsRefs.current[id]) {
+      lastValidOptionsRefs.current[id] = { current: null };
+    }
+  });
 
-// useGenerateFilter.js (FIXED - Issue #3 properly with debouncing)
+  useEffect(() => {
+    const updates = [];
+    const stateUpdates = [];
+
+    // Process all filters
+    Object.entries(hooksMap).forEach(([id, hook]) => {
+      const updateLogic = createFilterUpdateLogic(
+        hook.filterData,
+        id,
+        hook.filterValue,
+        hook.setFilterValue,
+        hook.defaultValue,
+        hook.urlOverride,
+        lastValidOptionsRefs.current[id]
+      );
+
+      const result = updateLogic();
+      
+      if (result) {
+        updates.push(result);
+        if (result.shouldUpdateState) {
+          stateUpdates.push({
+            id,
+            setState: hook.setFilterValue,
+            newState: result.updatedState
+          });
+        }
+      }
+    });
+
+    // Apply all filter updates in one batch
+    if (updates.length > 0) {
+      setFilters((prevFilters) =>
+        prevFilters.map((filter) => {
+          const update = updates.find(u => u.id === filter.id);
+          if (update) {
+            return {
+              ...filter,
+              state: update.updatedState,
+              options: update.newOptions,
+              optionsLabels: update.newOptionsLabels,
+              optionsSx: update.newOptionsSx,
+            };
+          }
+          return filter;
+        })
+      );
+
+      // Apply state updates after filter updates
+      stateUpdates.forEach(({ id, setState, newState }) => {
+        console.log(`[${id}] State changing to:`, newState);
+        setState(newState);
+      });
+    }
+  }, [
+    // Dependencies: watch all filter data and values
+    ...Object.values(hooksMap).map(h => h.filterData),
+    ...Object.values(hooksMap).map(h => h.filterValue),
+    ...Object.values(hooksMap).map(h => h.defaultValue),
+    ...Object.values(hooksMap).map(h => h.urlOverride),
+    setFilters
+  ]);
+};
+
+export default useAllFilterUpdates;
+
+
+// useGenerateFilter.js - Fixed to read searchParams properly
 import { useState, useEffect, useRef } from 'react';
 import { useGlobalStore } from '../../contexts/useGlobalStore';
 import { useSearchParams } from 'react-router-dom';
@@ -140,36 +186,44 @@ export const useGenerateFilter = ({
   const { setLastChangedEntityFilter } = useGlobalStore();
   const [searchParams] = useSearchParams();
 
-  // --- 1. Capture URL override ONCE and store it ---
+  // --- 1. Capture URL override ONCE on mount ---
   const urlOverrideRef = useRef(null);
   const hasCheckedUrl = useRef(false);
 
-  if (!hasCheckedUrl.current) {
-    const paramValue = searchParams.get(filterField);
-    if (paramValue !== null) {
-      if (isMulti) {
-        urlOverrideRef.current = paramValue.split(',').filter(Boolean);
-      } else {
-        if (paramValue === 'true') urlOverrideRef.current = true;
-        else if (paramValue === 'false') urlOverrideRef.current = false;
-        else urlOverrideRef.current = paramValue;
+  // Read searchParams in useEffect, not during render
+  useEffect(() => {
+    if (!hasCheckedUrl.current) {
+      const paramValue = searchParams.get(filterField);
+      if (paramValue !== null) {
+        if (isMulti) {
+          urlOverrideRef.current = paramValue.split(',').filter(Boolean);
+        } else {
+          if (paramValue === 'true') urlOverrideRef.current = true;
+          else if (paramValue === 'false') urlOverrideRef.current = false;
+          else urlOverrideRef.current = paramValue;
+        }
       }
+      hasCheckedUrl.current = true;
     }
-    hasCheckedUrl.current = true;
-  }
+  }, [searchParams, filterField, isMulti]);
 
-  // --- 2. Initialize state with URL value OR default ---
-  const initialValue = urlOverrideRef.current !== null 
-    ? urlOverrideRef.current 
-    : (isMulti ? [defaultValue] : defaultValue);
-
-  const [filterValue, setFilterValue] = useState(initialValue);
+  // --- 2. Initialize state with default ---
+  const [filterValue, setFilterValue] = useState(isMulti ? [defaultValue] : defaultValue);
   const [filterDep, setFilterDep] = useState(deps);
   const [filterFieldState] = useState(filterField);
 
   const prevDeps = useRef(deps);
 
-  // --- 3. Watch dependency changes ---
+  // --- 3. Apply URL override after it's been read ---
+  const hasAppliedUrlOverride = useRef(false);
+  useEffect(() => {
+    if (urlOverrideRef.current !== null && !hasAppliedUrlOverride.current) {
+      setFilterValue(urlOverrideRef.current);
+      hasAppliedUrlOverride.current = true;
+    }
+  }, [urlOverrideRef.current]);
+
+  // --- 4. Watch dependency changes ---
   useEffect(() => {
     if (JSON.stringify(deps) !== JSON.stringify(prevDeps.current)) {
       setFilterDep(deps);
@@ -177,14 +231,14 @@ export const useGenerateFilter = ({
     }
   }, [deps]);
 
-  // --- 4. Load options ---
+  // --- 5. Load options ---
   const {
     data: filterData,
     isLoading: filterLoading,
     isError: filterError,
   } = filterFunction(filterDep, depFields, filterFieldState);
 
-  // --- 5. Handlers ---
+  // --- 6. Handlers ---
   const handleChange = (event) => {
     const value = event.target?.value ?? event;
 
@@ -206,20 +260,14 @@ export const useGenerateFilter = ({
       setFilterValue(value);
     }
 
-    // Clear URL override after first user interaction
     urlOverrideRef.current = null;
   };
 
-  // FIX #3: Defer state update to next tick to not block navigation
   const handleManualUpdate = (value) => {
     if (['level8Cd'].includes(filterFieldState))
       setLastChangedEntityFilter(filterFieldState);
 
-    // Defer the update using setTimeout to ensure navigation isn't blocked
-    setTimeout(() => {
-      setFilterValue(isMulti ? [value] : value);
-    }, 0);
-    
+    setFilterValue(isMulti ? [value] : value);
     urlOverrideRef.current = null;
   };
 
@@ -241,7 +289,8 @@ export const useGenerateFilter = ({
   };
 };
 
-// useFilterStore.jsx (UPDATED with better URL param handling)
+
+// useFilterStore.jsx - Using the new hook (only showing the changed section)
 import React, {
   createContext,
   useContext,
@@ -272,7 +321,7 @@ import { useGlobalStore } from './useGlobalStore';
 import useFetchUser from '../dataHooks/useFetchUser';
 import { useGenerateFilter } from '../filterConfig/hooks/useGenerateFilter';
 import { filterConfigsMap } from '../filterConfig/filterConfig';
-import { useFilterUpdater } from 'sdi-library';
+import { useAllFilterUpdates } from 'sdi-library'; // CHANGED: Import the new hook
 import { useClosedFilter } from '../hooks/filters/viewFilters/useClosedFilter';
 import { useBeforeDeadlineFilter } from '../hooks/filters/viewFilters/useBeforeDeadlineFilter';
 import { useSeaFilter } from '../hooks/filters/entityFilters/useSeaFilter';
@@ -281,7 +330,6 @@ import { useSeaStatutoryFilter } from '../hooks/filters/entityFilters/useSeaStat
 //@ts-ignore
 const FilterStoreContext = createContext();
 
-// Helper functions for URL param serialization
 const serializeFilterValue = (value, isMulti) => {
   if (value === null || value === undefined) return null;
   if (isMulti) {
@@ -311,7 +359,7 @@ export const FilterStoreProvider = ({ children }) => {
     Array.from(searchParams.keys()).length > 0
   );
 
-  // ... all your filter hooks ...
+  // All filter hooks... (unchanged)
   const period = useGenerateFilter({
     filterFunction: usePeriodFilter,
     filterField: 'year',
@@ -339,12 +387,7 @@ export const FilterStoreProvider = ({ children }) => {
     isMulti: true,
   });
   const campaign = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      todocat.filterValue,
-      todotype.filterValue,
-      todosubtype.filterValue,
-    ],
+    deps: [period.filterValue, todocat.filterValue, todotype.filterValue, todosubtype.filterValue],
     depFields: ['year', 'todoCategoryKey', 'todoTypeKey', 'todoSubTypeKey'],
     filterFunction: useCampaignFilter,
     filterField: 'fkCampaign',
@@ -360,7 +403,6 @@ export const FilterStoreProvider = ({ children }) => {
     filterField: 'beforeDeadline',
     compareType: 'bool',
   });
-
   const coverage = useGenerateFilter({
     deps: [period.filterValue],
     depFields: ['year'],
@@ -380,95 +422,35 @@ export const FilterStoreProvider = ({ children }) => {
     filterField: 'seaStatutoryKey',
   });
   const region = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      coverage.filterValue,
-      scope.filterValue,
-      seaStatutory.filterValue,
-    ],
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue, seaStatutory.filterValue],
     depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey'],
     filterFunction: useRegionFilter,
     filterField: 'level5Cd',
   });
   const bc = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      coverage.filterValue,
-      scope.filterValue,
-      seaStatutory.filterValue,
-      region.filterValue,
-    ],
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue, seaStatutory.filterValue, region.filterValue],
     depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd'],
     filterFunction: useBCFilter,
     filterField: 'level6Cd',
   });
   const subbc = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      coverage.filterValue,
-      scope.filterValue,
-      seaStatutory.filterValue,
-      region.filterValue,
-      bc.filterValue,
-    ],
-    depFields: [
-      'year',
-      'level4Cd',
-      'scopeKey',
-      'seaStatutoryKey',
-      'level5Cd',
-      'level6Cd',
-    ],
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue, seaStatutory.filterValue, region.filterValue, bc.filterValue],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd', 'level6Cd'],
     filterFunction: useSubBCFilter,
     filterField: 'level7Cd',
   });
   const sea = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      coverage.filterValue,
-      scope.filterValue,
-      seaStatutory.filterValue,
-      region.filterValue,
-      bc.filterValue,
-      subbc.filterValue,
-    ],
-    depFields: [
-      'year',
-      'level4Cd',
-      'scopeKey',
-      'seaStatutoryKey',
-      'level5Cd',
-      'level6Cd',
-      'level7Cd',
-    ],
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue, seaStatutory.filterValue, region.filterValue, bc.filterValue, subbc.filterValue],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd', 'level6Cd', 'level7Cd'],
     filterFunction: useSeaFilter,
     filterField: 'seaparentKey',
   });
   const rm = useGenerateFilter({
-    deps: [
-      period.filterValue,
-      coverage.filterValue,
-      scope.filterValue,
-      seaStatutory.filterValue,
-      region.filterValue,
-      bc.filterValue,
-      subbc.filterValue,
-      sea.filterValue,
-    ],
-    depFields: [
-      'year',
-      'level4Cd',
-      'scopeKey',
-      'seaStatutoryKey',
-      'level5Cd',
-      'level6Cd',
-      'level7Cd',
-      'seaparentKey',
-    ],
+    deps: [period.filterValue, coverage.filterValue, scope.filterValue, seaStatutory.filterValue, region.filterValue, bc.filterValue, subbc.filterValue, sea.filterValue],
+    depFields: ['year', 'level4Cd', 'scopeKey', 'seaStatutoryKey', 'level5Cd', 'level6Cd', 'level7Cd', 'seaparentKey'],
     filterFunction: useRMFilter,
     filterField: 'level8Cd',
   });
-
   const segment = useGenerateFilter({
     deps: [period.filterValue],
     depFields: ['year'],
@@ -509,29 +491,10 @@ export const FilterStoreProvider = ({ children }) => {
   });
 
   const hooksMap = {
-    period,
-    todocat,
-    todotype,
-    todosubtype,
-    campaign,
-    closed,
-    beforeDeadline,
-    coverage,
-    scope,
-    seaStatutory,
-    region,
-    bc,
-    subbc,
-    sea,
-    rm,
-    segment,
-    priority,
-    maincategory,
-    category,
-    subcategory,
+    period, todocat, todotype, todosubtype, campaign, closed, beforeDeadline,
+    coverage, scope, seaStatutory, region, bc, subbc, sea, rm,
+    segment, priority, maincategory, category, subcategory,
   };
-
-  // ... rest of the code stays the same ...
 
   const resetFilters = useCallback(() => {
     Object.values(hooksMap).forEach((h) =>
@@ -541,57 +504,33 @@ export const FilterStoreProvider = ({ children }) => {
 
   useEffect(() => {
     if (!isInitialMount.current) return;
-
     if (hasInitialUrlParams.current) {
       console.log('Applying URL params on initial load');
       isApplyingUrlParams.current = true;
-
       Object.entries(hooksMap).forEach(([id, hook]) => {
         const paramValue = searchParams.get(hook.filterField);
         if (paramValue !== null) {
-          const deserializedValue = deserializeFilterValue(
-            paramValue,
-            hook.isMulti,
-            hook.defaultValue
-          );
+          const deserializedValue = deserializeFilterValue(paramValue, hook.isMulti, hook.defaultValue);
           console.log(`Setting ${id} to:`, deserializedValue);
           hook.setFilterValue(deserializedValue);
         }
       });
-
-      setTimeout(() => {
-        isApplyingUrlParams.current = false;
-      }, 150);
+      setTimeout(() => { isApplyingUrlParams.current = false; }, 150);
     }
-
     isInitialMount.current = false;
   }, []);
 
   useEffect(() => {
     if (isInitialMount.current || isApplyingUrlParams.current) return;
-
     const newParams = new URLSearchParams();
-
     Object.entries(hooksMap).forEach(([id, hook]) => {
-      const value =
-        hook.filterValue !== undefined
-          ? hook.filterValue
-          : hook.isMulti
-          ? [hook.defaultValue]
-          : hook.defaultValue;
-
+      const value = hook.filterValue !== undefined ? hook.filterValue : (hook.isMulti ? [hook.defaultValue] : hook.defaultValue);
       const serializedValue = serializeFilterValue(value, hook.isMulti);
-
-      const defaultSerialized = serializeFilterValue(
-        hook.isMulti ? [hook.defaultValue] : hook.defaultValue,
-        hook.isMulti
-      );
-
+      const defaultSerialized = serializeFilterValue(hook.isMulti ? [hook.defaultValue] : hook.defaultValue, hook.isMulti);
       if (serializedValue !== null && serializedValue !== defaultSerialized) {
         newParams.set(hook.filterField, serializedValue);
       }
     });
-
     setSearchParams(newParams, { replace: true });
   }, [...Object.values(hooksMap).map((h) => h.filterValue)]);
 
@@ -604,80 +543,36 @@ export const FilterStoreProvider = ({ children }) => {
     } else {
       console.log('Skipping reset - had initial URL params');
     }
-
     setForcedLoadingArray([]);
-
     const userFunc = user?.currentUser?.securityRole;
     setUserFunction(userFunc);
-
     console.log('userFunc', userFunc);
-
     switch (userFunc) {
-      case 'Special':
-        setActiveConfig(filterConfigsMap.special);
-        break;
-      case 'AM':
-        setActiveConfig(filterConfigsMap.am);
-        break;
-      case 'BCM':
-        setActiveConfig(filterConfigsMap.bcm);
-        break;
-      case 'RM':
-        setActiveConfig(filterConfigsMap.rm);
-        break;
-      default:
-        setActiveConfig(filterConfigsMap.special);
-        break;
+      case 'Special': setActiveConfig(filterConfigsMap.special); break;
+      case 'AM': setActiveConfig(filterConfigsMap.am); break;
+      case 'BCM': setActiveConfig(filterConfigsMap.bcm); break;
+      case 'RM': setActiveConfig(filterConfigsMap.rm); break;
+      default: setActiveConfig(filterConfigsMap.special); break;
     }
   }, [user, setUserFunction, setActiveConfig]);
 
   const [filters, setFilters] = useState([]);
-
   useEffect(() => {
     const existingMap = Object.fromEntries(filters.map((f) => [f.id, f]));
     const newFilters = [];
-
     activeConfig.forEach((section) => {
-      const titleObj = {
-        id: `title-${section.section}`,
-        type: 'title',
-        label: section.section,
-      };
-      newFilters.push(titleObj);
-
+      newFilters.push({ id: `title-${section.section}`, type: 'title', label: section.section });
       section.filters.forEach((f) => {
         const hook = hooksMap[f.id];
         if (!hook) {
-          newFilters.push({
-            id: f.id,
-            type: 'select',
-            label: f.label,
-            state: undefined,
-            handleChange: () => {},
-            handleManualUpdate: () => {},
-            options: [],
-            optionsLabels: [],
-            optionsSx: [],
-            key: f.id,
-            hide: f.hide,
-            hideWhenNoParentValue: false,
-            filterField: '',
-            compareType: '',
-          });
+          newFilters.push({ id: f.id, type: 'select', label: f.label, state: undefined, handleChange: () => {}, handleManualUpdate: () => {}, options: [], optionsLabels: [], optionsSx: [], key: f.id, hide: f.hide, hideWhenNoParentValue: false, filterField: '', compareType: '' });
           return;
         }
-
         const existing = existingMap[f.id];
-
         if (existing) {
           existing.type = hook.isMulti ? 'multiselect' : 'select';
           existing.label = f.label;
-          existing.state =
-            hook.filterValue !== undefined
-              ? hook.filterValue
-              : hook.isMulti
-              ? [hook.defaultValue]
-              : hook.defaultValue;
+          existing.state = hook.filterValue !== undefined ? hook.filterValue : (hook.isMulti ? [hook.defaultValue] : hook.defaultValue);
           existing.handleChange = hook.handleChange;
           existing.handleManualUpdate = hook.handleManualUpdate;
           existing.options = hook.filterData?.options || [];
@@ -690,69 +585,32 @@ export const FilterStoreProvider = ({ children }) => {
           existing.compareType = hook.compareType;
           newFilters.push(existing);
         } else {
-          const newFilter = {
-            id: f.id,
-            type: hook.isMulti ? 'multiselect' : 'select',
-            label: f.label,
-            state:
-              hook.filterValue !== undefined
-                ? hook.filterValue
-                : hook.isMulti
-                ? [hook.defaultValue]
-                : hook.defaultValue,
-            handleChange: hook.handleChange,
-            handleManualUpdate: hook.handleManualUpdate,
-            options: hook.filterData?.options || [],
-            optionsLabels: hook.filterData?.optionsLabels || [];
-            optionsSx: hook.filterData?.optionsSx || [],
-            key: f.id,
-            hide: f.hide,
-            hideWhenNoParentValue: hook.hideWhenNoParentValue,
-            filterField: hook.filterField,
-            compareType: hook.compareType,
-          };
-          newFilters.push(newFilter);
+          newFilters.push({
+            id: f.id, type: hook.isMulti ? 'multiselect' : 'select', label: f.label,
+            state: hook.filterValue !== undefined ? hook.filterValue : (hook.isMulti ? [hook.defaultValue] : hook.defaultValue),
+            handleChange: hook.handleChange, handleManualUpdate: hook.handleManualUpdate,
+            options: hook.filterData?.options || [], optionsLabels: hook.filterData?.optionsLabels || [], optionsSx: hook.filterData?.optionsSx || [],
+            key: f.id, hide: f.hide, hideWhenNoParentValue: hook.hideWhenNoParentValue, filterField: hook.filterField, compareType: hook.compareType
+          });
         }
       });
     });
-
     setFilters(newFilters);
-  }, [
-    activeConfig,
-    ...Object.values(hooksMap).map((h) => h.filterData),
-    ...Object.values(hooksMap).map((h) => h.filterValue),
-    userFunction,
-  ]);
+  }, [activeConfig, ...Object.values(hooksMap).map((h) => h.filterData), ...Object.values(hooksMap).map((h) => h.filterValue), userFunction]);
 
-  Object.entries(hooksMap).forEach(([id, hook]) => {
-    useFilterUpdater(
-      hook.filterData,
-      id,
-      setFilters,
-      hook.filterValue,
-      hook.setFilterValue,
-      hook.defaultValue,
-      hook.urlOverride
-    );
-  });
+  // CHANGED: Use the new single hook instead of loop
+  useAllFilterUpdates(hooksMap, setFilters);
 
   const isLoading = useMemo(() => {
     const anyLoading = Object.values(hooksMap).some((h) => h.filterLoading);
     const forcedLoading = forcedLoadingArray.length > 0;
-    
     return anyLoading || forcedLoading;
-  }, [
-    ...Object.values(hooksMap).map((h) => h.filterLoading),
-    forcedLoadingArray.length
-  ]);
+  }, [...Object.values(hooksMap).map((h) => h.filterLoading), forcedLoadingArray.length]);
 
-  const isError = useMemo(() => {
-    return Object.values(hooksMap).some((h) => h.filterError);
-  }, [...Object.values(hooksMap).map((h) => h.filterError)]);
+  const isError = useMemo(() => Object.values(hooksMap).some((h) => h.filterError), [...Object.values(hooksMap).map((h) => h.filterError)]);
 
   return (
-    <FilterStoreContext.Provider
-      value={{ filters, setFilters, resetFilters, isLoading, isError }}>
+    <FilterStoreContext.Provider value={{ filters, setFilters, resetFilters, isLoading, isError }}>
       {children}
     </FilterStoreContext.Provider>
   );
