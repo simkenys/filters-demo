@@ -1,0 +1,191 @@
+import { useState, useEffect, useRef } from 'react';
+import { useGlobalStore } from '../../contexts/useGlobalStore';
+import { useSearchParams } from 'react-router-dom';
+
+export const useGenerateFilter = ({
+  id = 'dummy',
+  deps = [],
+  depFields = [],
+  defaultValue = '-1',
+  isMulti = false,
+  filterFunction,
+  filterField,
+  hideWhenNoParentValue = false,
+  compareType = 'int',
+}) => {
+  const { setLastChangedEntityFilter } = useGlobalStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // --- 1. Capture URL override ONCE on mount ---
+  const urlOverrideRef = useRef(null);
+  const hasCheckedUrl = useRef(false);
+
+  // Read searchParams in useEffect, not during render
+  useEffect(() => {
+    if (!hasCheckedUrl.current) {
+      const paramValue = searchParams.get(id);
+      if (paramValue !== null) {
+        if (isMulti) {
+          urlOverrideRef.current = paramValue.split(',').filter(Boolean);
+        } else {
+          if (paramValue === 'true') urlOverrideRef.current = true;
+          else if (paramValue === 'false') urlOverrideRef.current = false;
+          else urlOverrideRef.current = paramValue;
+        }
+      }
+      hasCheckedUrl.current = true;
+    }
+  }, [searchParams, id, isMulti]);
+
+  // --- 2. Initialize state with default ---
+  const [filterValue, setFilterValue] = useState(
+    isMulti ? [defaultValue] : defaultValue
+  );
+  const [filterDep, setFilterDep] = useState(deps);
+  const [filterFieldState] = useState(filterField);
+
+  const prevDeps = useRef(deps);
+
+  // --- 3. Load options ---
+  const {
+    data: filterData,
+    isLoading: filterLoading,
+    isError: filterError,
+  } = filterFunction(filterDep, depFields, filterFieldState);
+
+  // --- 4. Validate and apply URL override after options are loaded ---
+  const hasAppliedUrlOverride = useRef(false);
+  useEffect(() => {
+    if (
+      urlOverrideRef.current !== null &&
+      !hasAppliedUrlOverride.current &&
+      filterData?.options &&
+      !filterLoading
+    ) {
+      const availableOptions = filterData.options || [];
+      
+      if (isMulti) {
+        // For multi-select: filter out invalid values
+        const validValues = urlOverrideRef.current.filter((val) =>
+          availableOptions.includes(val)
+        );
+        const invalidValues = urlOverrideRef.current.filter(
+          (val) => !availableOptions.includes(val)
+        );
+
+        if (invalidValues.length > 0) {
+          console.warn(
+            `[${id}] Invalid URL values detected and removed:`,
+            invalidValues,
+            `\nValid options:`,
+            availableOptions
+          );
+
+          // Clean up URL by removing invalid values
+          const newParams = new URLSearchParams(searchParams);
+          if (validValues.length > 0) {
+            newParams.set(id, validValues.join(','));
+          } else {
+            newParams.delete(id);
+          }
+          setSearchParams(newParams, { replace: true });
+        }
+
+        // Apply valid values or default
+        setFilterValue(validValues.length > 0 ? validValues : [defaultValue]);
+      } else {
+        // For single-select: check if value is valid
+        const isValid = availableOptions.includes(urlOverrideRef.current);
+
+        if (!isValid) {
+          console.warn(
+            `[${id}] Invalid URL value detected: "${urlOverrideRef.current}"`,
+            `\nValid options:`,
+            availableOptions,
+            `\nReverting to default: "${defaultValue}"`
+          );
+
+          // Remove invalid param from URL
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete(id);
+          setSearchParams(newParams, { replace: true });
+
+          // Apply default value
+          setFilterValue(defaultValue);
+        } else {
+          // Apply valid URL value
+          setFilterValue(urlOverrideRef.current);
+        }
+      }
+
+      hasAppliedUrlOverride.current = true;
+      urlOverrideRef.current = null; // Clear after applying
+    }
+  }, [
+    filterData,
+    filterLoading,
+    defaultValue,
+    isMulti,
+    id,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  // --- 5. Watch dependency changes ---
+  useEffect(() => {
+    if (JSON.stringify(deps) !== JSON.stringify(prevDeps.current)) {
+      setFilterDep(deps);
+      prevDeps.current = deps;
+    }
+  }, [deps]);
+
+  // --- 6. Handlers ---
+  const handleChange = (event) => {
+    const value = event.target?.value ?? event;
+
+    if (
+      ['level4Cd', 'level5Cd', 'level6Cd', 'level7Cd', 'level8Cd'].includes(
+        filterFieldState
+      )
+    ) {
+      setLastChangedEntityFilter(filterFieldState);
+    }
+
+    if (isMulti) {
+      if (Array.isArray(value) && value[value.length - 1] === '-1')
+        setFilterValue(['-1']);
+      else if (Array.isArray(value))
+        setFilterValue(value.filter((v) => v !== '-1'));
+      else setFilterValue([value]);
+    } else {
+      setFilterValue(value);
+    }
+
+    urlOverrideRef.current = null;
+  };
+
+  const handleManualUpdate = (value) => {
+    if (['level8Cd'].includes(filterFieldState))
+      setLastChangedEntityFilter(filterFieldState);
+
+    setFilterValue(isMulti ? [value] : value);
+    urlOverrideRef.current = null;
+  };
+
+  return {
+    filterValue,
+    setFilterValue,
+    filterField: filterFieldState,
+    filterData,
+    filterLoading,
+    filterError,
+    handleChange,
+    handleManualUpdate,
+    setFilterDep,
+    defaultValue,
+    isMulti,
+    hideWhenNoParentValue,
+    compareType,
+    urlOverride: urlOverrideRef.current,
+  };
+};
