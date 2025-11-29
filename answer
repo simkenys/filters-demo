@@ -12,6 +12,7 @@ const useFilterUpdater = (
   // Track previous options to detect when they actually change
   const prevOptionsRef = useRef(null);
   const isInitialMount = useRef(true);
+  const lastValidationOptions = useRef(null);
 
   useEffect(() => {
     // Skip initial mount to avoid unnecessary updates
@@ -48,22 +49,6 @@ const useFilterUpdater = (
     // Check if options actually changed (not just re-rendered)
     const optionsChanged =
       JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
-
-    // --- VALIDATE STATE WHEN NEW OPTIONS ARRIVE ---
-    if (optionsChanged && newOptions.length > 0) {
-      if (Array.isArray(state)) {
-        // Multi-select validation
-        const invalidValues = state.filter((val) => !newOptions.includes(val));
-        if (invalidValues.length > 0) {
-          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
-        }
-      } else {
-        // Single-select validation
-        if (!newOptions.includes(state)) {
-          console.warn(`[${id}] Invalid state value detected:`, state);
-        }
-      }
-    }
 
     // Update the reference only after we've decided to process this change
     prevOptionsRef.current = newOptions;
@@ -167,6 +152,33 @@ const useFilterUpdater = (
       //   optionsLength: newOptions.length,
       // });
       setState(updatedState);
+    }
+
+    // --- VALIDATE FINAL STATE AFTER UPDATE ---
+    // Only validate if:
+    // 1. We have options
+    // 2. Options have actually changed (not just re-render)
+    // 3. These are different options than last validation (stabilized)
+    const shouldValidate = 
+      newOptions.length > 0 && 
+      optionsChanged &&
+      JSON.stringify(lastValidationOptions.current) !== JSON.stringify(newOptions);
+
+    if (shouldValidate) {
+      lastValidationOptions.current = newOptions;
+      
+      if (Array.isArray(updatedState)) {
+        // Multi-select validation
+        const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
+        if (invalidValues.length > 0) {
+          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
+        }
+      } else {
+        // Single-select validation
+        if (!newOptions.includes(updatedState)) {
+          console.warn(`[${id}] Invalid state value detected:`, updatedState);
+        }
+      }
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
