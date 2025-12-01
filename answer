@@ -50,7 +50,6 @@ const useFilterUpdater = (
     prevOptionsRef.current = newOptions;
 
     let updatedState;
-    let hadInvalidUrlOverride = false;
 
     // Calculate the updated state based on new options
     if (Array.isArray(state)) {
@@ -61,24 +60,18 @@ const useFilterUpdater = (
         const validUrlValues = urlOverride.filter((d) =>
           newOptions.includes(d)
         );
-        const invalidUrlValues = urlOverride.filter((d) =>
-          !newOptions.includes(d)
-        );
-        
         if (validUrlValues.length > 0) {
           updatedState = validUrlValues;
-          // Log if some values were invalid
-          if (invalidUrlValues.length > 0) {
-            console.warn(`[${id}] Invalid URL values detected and removed:`, invalidUrlValues);
-          }
         } else if (newOptions.length === 0) {
           // URL values not in options yet (still loading), keep them temporarily
           updatedState = urlOverride;
         } else {
-          // URL values are all invalid, reset to default
-          console.warn(`[${id}] All URL values are invalid:`, invalidUrlValues);
-          updatedState = defaultValue ? [defaultValue] : newOptions.length > 0 ? [newOptions[0]] : [];
-          hadInvalidUrlOverride = true;
+          // URL values are invalid, don't keep them - use default
+          updatedState = defaultValue
+            ? [defaultValue]
+            : newOptions.length > 0
+            ? [newOptions[0]]
+            : [];
         }
       } else {
         // PRIORITY 2: Try to preserve ALL current state values
@@ -88,8 +81,8 @@ const useFilterUpdater = (
         if (allCurrentValuesStillValid) {
           // All values are still valid, keep the entire current state
           updatedState = state;
-        } else if (optionsChanged && newOptions.length > 0) {
-          // Options changed and we have new options
+        } else {
+          // Some or all values are invalid, filter to valid ones or use default
           const matchingStates = state.filter((d) => newOptions.includes(d));
 
           if (matchingStates.length > 0) {
@@ -103,9 +96,6 @@ const useFilterUpdater = (
               ? [newOptions[0]]
               : [];
           }
-        } else {
-          // Options didn't change or we have no new options, keep current state
-          updatedState = state;
         }
       }
     } else {
@@ -116,14 +106,9 @@ const useFilterUpdater = (
         const isUrlValid = newOptions.includes(urlOverride);
         if (isUrlValid) {
           updatedState = urlOverride;
-        } else if (newOptions.length === 0) {
-          // URL value not in options yet (still loading), keep it temporarily
-          updatedState = urlOverride;
         } else {
-          // URL value is invalid, reset to default
-          console.warn(`[${id}] Invalid URL value:`, urlOverride);
-          updatedState = defaultValue ?? newOptions[0] ?? "";
-          hadInvalidUrlOverride = true;
+          // URL value not in options yet, keep it temporarily
+          updatedState = urlOverride;
         }
       } else {
         // PRIORITY 2: Try to preserve current state
@@ -159,8 +144,7 @@ const useFilterUpdater = (
     );
 
     // Update local state if it changed (outside of setFilters callback)
-    // FORCE update if we corrected an invalid URL override, even if state looks the same
-    if (hadInvalidUrlOverride || JSON.stringify(state) !== JSON.stringify(updatedState)) {
+    if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
       setState(updatedState);
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
