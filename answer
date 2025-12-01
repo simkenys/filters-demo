@@ -61,14 +61,22 @@ const useFilterUpdater = (
         const validUrlValues = urlOverride.filter((d) =>
           newOptions.includes(d)
         );
+        const invalidUrlValues = urlOverride.filter((d) =>
+          !newOptions.includes(d)
+        );
+        
         if (validUrlValues.length > 0) {
           updatedState = validUrlValues;
+          // Log if some values were invalid
+          if (invalidUrlValues.length > 0) {
+            console.warn(`[${id}] Invalid URL values detected and removed:`, invalidUrlValues);
+          }
         } else if (newOptions.length === 0) {
           // URL values not in options yet (still loading), keep them temporarily
           updatedState = urlOverride;
         } else {
-          // URL values are invalid, reset to default
-          console.warn(`[${id}] All URL values are invalid:`, urlOverride);
+          // URL values are all invalid, reset to default
+          console.warn(`[${id}] All URL values are invalid:`, invalidUrlValues);
           updatedState = defaultValue ? [defaultValue] : newOptions.length > 0 ? [newOptions[0]] : [];
           hadInvalidUrlOverride = true;
         }
