@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useSnackbar } from 'notistack';
 
 const useFilterUpdater = (
   data,
@@ -9,10 +10,13 @@ const useFilterUpdater = (
   defaultValue = null,
   urlOverride = null
 ) => {
+  const { enqueueSnackbar } = useSnackbar();
+  
   // Track previous options to detect when they actually change
   const prevOptionsRef = useRef(null);
   const isInitialMount = useRef(true);
-  const lastValidationOptions = useRef(null);
+  const hasProcessedUrlOverride = useRef(false);
+  const hasShownWarning = useRef(false);
 
   useEffect(() => {
     // Skip initial mount to avoid unnecessary updates
@@ -40,9 +44,6 @@ const useFilterUpdater = (
 
     if (isLikelyLoading) {
       // Don't update anything - wait for real data to arrive
-      // console.log(
-      //   `[${id}] Skipping update - likely loading state (empty options)`
-      // );
       return;
     }
 
@@ -54,21 +55,57 @@ const useFilterUpdater = (
     prevOptionsRef.current = newOptions;
 
     let updatedState;
+    let hadInvalidUrlOverride = false;
+
+    // Only use urlOverride if we haven't processed it yet and options are available
+    const shouldUseUrlOverride = urlOverride !== null && !hasProcessedUrlOverride.current && newOptions.length > 0;
+    
+    if (shouldUseUrlOverride) {
+      hasProcessedUrlOverride.current = true;
+    }
 
     // Calculate the updated state based on new options
     if (Array.isArray(state)) {
       // ===== MULTI SELECT =====
 
-      // PRIORITY 1: Try to preserve URL override if it's valid
-      if (urlOverride && Array.isArray(urlOverride)) {
+      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
+      if (shouldUseUrlOverride && Array.isArray(urlOverride)) {
         const validUrlValues = urlOverride.filter((d) =>
           newOptions.includes(d)
         );
+        const invalidUrlValues = urlOverride.filter((d) =>
+          !newOptions.includes(d)
+        );
+        
         if (validUrlValues.length > 0) {
           updatedState = validUrlValues;
+          // Log if some values were invalid
+          if (invalidUrlValues.length > 0) {
+            console.warn(`[${id}] Invalid URL values detected and removed:`, invalidUrlValues);
+            if (!hasShownWarning.current) {
+              enqueueSnackbar(`Invalid URL values for ${id}: ${invalidUrlValues.join(', ')}`, { 
+                variant: 'warning',
+                autoHideDuration: 5000 
+              });
+              hasShownWarning.current = true;
+            }
+          }
         } else {
-          // URL values not in options yet, keep them temporarily
-          updatedState = urlOverride;
+          // All URL values are invalid, reset to default
+          console.warn(`[${id}] All URL values are invalid:`, invalidUrlValues);
+          if (!hasShownWarning.current) {
+            enqueueSnackbar(`All URL values for ${id} are invalid and were reset to default`, { 
+              variant: 'warning',
+              autoHideDuration: 5000 
+            });
+            hasShownWarning.current = true;
+          }
+          updatedState = defaultValue
+            ? [defaultValue]
+            : newOptions.length > 0
+            ? [newOptions[0]]
+            : [];
+          hadInvalidUrlOverride = true;
         }
       } else {
         // PRIORITY 2: Try to preserve ALL current state values
@@ -78,8 +115,8 @@ const useFilterUpdater = (
         if (allCurrentValuesStillValid) {
           // All values are still valid, keep the entire current state
           updatedState = state;
-        } else if (optionsChanged && newOptions.length > 0) {
-          // Options changed and we have new options
+        } else {
+          // Some or all values are invalid, filter to valid ones or use default
           const matchingStates = state.filter((d) => newOptions.includes(d));
 
           if (matchingStates.length > 0) {
@@ -93,22 +130,28 @@ const useFilterUpdater = (
               ? [newOptions[0]]
               : [];
           }
-        } else {
-          // Options didn't change or we have no new options, keep current state
-          updatedState = state;
         }
       }
     } else {
       // ===== SINGLE SELECT =====
 
-      // PRIORITY 1: Try to preserve URL override if it's valid
-      if (urlOverride !== null) {
+      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
+      if (shouldUseUrlOverride) {
         const isUrlValid = newOptions.includes(urlOverride);
         if (isUrlValid) {
           updatedState = urlOverride;
         } else {
-          // URL value not in options yet, keep it temporarily
-          updatedState = urlOverride;
+          // URL value is invalid, reset to default
+          console.warn(`[${id}] Invalid URL value:`, urlOverride);
+          if (!hasShownWarning.current) {
+            enqueueSnackbar(`Invalid URL value for ${id}: ${urlOverride}`, { 
+              variant: 'warning',
+              autoHideDuration: 5000 
+            });
+            hasShownWarning.current = true;
+          }
+          updatedState = defaultValue ?? newOptions[0] ?? "";
+          hadInvalidUrlOverride = true;
         }
       } else {
         // PRIORITY 2: Try to preserve current state
@@ -144,68 +187,9 @@ const useFilterUpdater = (
     );
 
     // Update local state if it changed (outside of setFilters callback)
-    if (JSON.stringify(state) !== JSON.stringify(updatedState)) {
-      // console.log(`[${id}] State update:`, {
-      //   from: state,
-      //   to: updatedState,
-      //   reason: optionsChanged ? "options changed" : "validation",
-      //   optionsLength: newOptions.length,
-      // });
+    // FORCE update if we corrected an invalid URL override, even if state looks the same
+    if (hadInvalidUrlOverride || JSON.stringify(state) !== JSON.stringify(updatedState)) {
       setState(updatedState);
-    }
-
-    // --- VALIDATE FINAL STATE AFTER UPDATE ---
-    // Only validate if:
-    // 1. We have options
-    // 2. Options have actually changed (not just re-render)
-    // 3. These are different options than last validation (stabilized)
-    const shouldValidate = 
-      newOptions.length > 0 && 
-      optionsChanged &&
-      JSON.stringify(lastValidationOptions.current) !== JSON.stringify(newOptions);
-
-    if (shouldValidate) {
-      lastValidationOptions.current = newOptions;
-      
-      let needsCorrection = false;
-      let correctedState = updatedState;
-      
-      if (Array.isArray(updatedState)) {
-        // Multi-select validation
-        const validValues = updatedState.filter((val) => newOptions.includes(val));
-        const invalidValues = updatedState.filter((val) => !newOptions.includes(val));
-        
-        if (invalidValues.length > 0) {
-          console.warn(`[${id}] Invalid state values detected:`, invalidValues);
-          // Keep valid values, or reset to default if none are valid
-          correctedState = validValues.length > 0 ? validValues : [defaultValue];
-          needsCorrection = true;
-        }
-      } else {
-        // Single-select validation
-        if (!newOptions.includes(updatedState)) {
-          console.warn(`[${id}] Invalid state value detected:`, updatedState);
-          // Reset to default value
-          correctedState = defaultValue;
-          needsCorrection = true;
-        }
-      }
-
-      // Apply correction if needed
-      if (needsCorrection) {
-        setState(correctedState);
-        setFilters((prevFilters) =>
-          prevFilters.map((filter) => {
-            if (filter.id === id) {
-              return {
-                ...filter,
-                state: correctedState,
-              };
-            }
-            return filter;
-          })
-        );
-      }
     }
   }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
 };
