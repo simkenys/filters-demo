@@ -1,425 +1,57 @@
-i export this from my npm lib:
-
-import React, { useState, useEffect } from 'react';
-
-import {
-
-  Card,
-
-  CardContent,
-
-  Typography,
-
-  Box,
-
-  Button,
-
-  ListItemIcon,
-
-  ListItemText,
-
-  ListItemButton,
-
-  List,
-
-  useTheme,
-
-  Dialog,
-
-  DialogTitle,
-
-  DialogContent,
-
-  TextField,
-
-  DialogActions,
-
-  useColorScheme,
-
-} from '@mui/material';
-
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-
-import InsightsIcon from '@mui/icons-material/Insights';
-
-import CloseIcon from '@mui/icons-material/Close';
-
-import { useSnackbar } from 'notistack';
-
-import useActiveFilters from '../../hooks/useActiveFilters';
-
-const noFilter = [];
-
-const activeCampaignFilter = [{ id: 'campaignActive', value: '0' }];
-
-const initialViews = [
-
-  {
-
-    key: 'No filter',
-
-    desc: 'Reset all filters to their default state',
-
-    filter: noFilter,
-
-  },
-
-  {
-
-    key: 'Active Campaigns',
-
-    desc: 'Only show todos linked to an active campaign',
-
-    filter: activeCampaignFilter,
-
-  },
-
-];
-
-const CardViews = ({filters, loadFilters}) => {
-
-  const theme = useTheme();
-
-  const [views, setViews] = useState(initialViews);
-
-  const [openDialog, setOpenDialog] = useState(false);
-
-  const [customViewKey, setCustomViewKey] = useState('');
-
-  const [customViewDesc, setCustomViewDesc] = useState('');
-
-  const { mode } = useColorScheme();
-
-  const { RenderedFilters, hasActiveFilters } = useActiveFilters(filters, mode);
-
-  const { enqueueSnackbar } = useSnackbar();
-
-  useEffect(() => {
-
-    const storedViews = Object.keys(localStorage)
-
-      .filter((key) => key.startsWith('customView_'))
-
-      .map((key) => JSON.parse(localStorage.getItem(key)));
-
-    if (storedViews.length > 0) {
-
-      setViews(() => [...initialViews, ...storedViews]);
-
-    }
-
-  }, []);
-
-  const handleClickAdd = () => {
-
-    const customFilter = [];
-
-    filters.map((d) => {
-
-      const keep =
-
-        d?.type !== 'title' &&
-
-        !(Array.isArray(d?.state) && d?.state.includes('-1')) &&
-
-        d?.state !== '-1';
-
-      if (keep) {
-
-        customFilter.push({ id: d?.id, value: d?.state });
-
-      }
-
-    });
-
-    const customView = {
-
-      key: customViewKey,
-
-      desc: customViewDesc,
-
-      filter: customFilter,
-
-      userMade: true,
-
-    };
-
-    localStorage.setItem(
-
-      `customView_${customViewKey}`,
-
-      JSON.stringify(customView)
-
-    );
-
-    setViews((prevViews) => {
-
-      // Remove the old custom view with the same key if it exists
-
-      const updatedViews = prevViews.filter(
-
-        (view) => view.key !== customViewKey
-
-      );
-
-      // Add the new custom view
-
-      return [...updatedViews, customView];
-
-    });
-
-    setOpenDialog(false);
-
-    enqueueSnackbar(`${customViewKey} saved`, { variant: 'success' });
-
-    resetKeys();
-
-  };
-
-  const handleOpenDialog = () => {
-
-    setOpenDialog(true);
-
-  };
-
-  const handleCloseDialog = () => {
-
-    setOpenDialog(false);
-
-    resetKeys();
-
-  };
-
-  const resetKeys = () => {
-
-    setCustomViewKey('');
-
-    setCustomViewDesc('');
-
-  };
-
-  return (
-
-    <>
-
-      <Card
-
-        sx={{
-
-          borderRadius: '12px',
-
-          padding: 1.5,
-
-          boxShadow: '0px 14px 40px rgba(34, 35, 58, 0.2)',
-
-          maxHeight: '75vh',
-
-          overflowY: 'auto',
-
-        }}>
-
-        <CardContent>
-
-          <Typography
-
-            gutterBottom
-
-            variant="h5"
-
-            component="div"
-
-            sx={{ color: theme.palette.primary.main }}>
-
-            Views
-
-          </Typography>
-
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-
-            Click on an item below to pre-apply filters across the whole site.
-
-          </Typography>
-
-          <Box sx={{ mt: '40px !important' }}>
-
-            <List>
-
-              {views.map((d) => {
-
-                return (
-
-                  <ListItemButton
-
-                    key={d?.key}
-
-                    onClick={() => {
-
-                      loadFilters(d?.filter);
-
-                      enqueueSnackbar(`${d?.key} preset loaded`, {
-
-                        variant: 'success',
-
-                      });
-
-                    }}
-
-                    sx={{ padding: 0 }}>
-
-                    <ListItemIcon>
-
-                      <InsightsIcon
-
-                        sx={{ color: theme.palette.secondary.main }}
-
-                      />
-
-                    </ListItemIcon>
-
-                    <ListItemText
-
-                      primary={d?.key}
-
-                      secondary={d?.desc ? d.desc : null}
-
-                    />
-
-                    {d?.userMade ? (
-
-                      <CloseIcon
-
-                        sx={{ color: 'red', cursor: 'pointer' }}
-
-                        onClick={(e) => {
-
-                          e.stopPropagation(); // Prevent the parent ListItemButton's onClick from firing
-
-                          localStorage.removeItem(`customView_${d.key}`);
-
-                          setViews((prevViews) =>
-
-                            prevViews.filter((view) => view.key !== d.key)
-
-                          );
-
-                          enqueueSnackbar(`${d?.key} deleted`, {
-
-                            variant: 'success',
-
-                          });
-
-                        }}
-
-                      />
-
-                    ) : (
-
-                      <CloseIcon sx={{ color: 'transparent' }} />
-
-                    )}
-
-                  </ListItemButton>
-
-                );
-
-              })}
-
-              <Box sx={{ height: '40px' }} />
-
-              <ListItemButton onClick={handleOpenDialog} sx={{ padding: 0 }}>
-
-                <ListItemIcon>
-
-                  <AddCircleOutlineIcon
-
-                    sx={{ color: theme.palette.primary.main }}
-
-                  />
-
-                </ListItemIcon>
-
-                <ListItemText
-
-                  primary={'Add your own view'}
-
-                  secondary={
-
-                    'Save your currently active filters as a custom view.'
-
-                  }
-
-                />
-
-              </ListItemButton>
-
-            </List>
-
-          </Box>
-
-        </CardContent>
-
-      </Card>
-
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
-
-        <DialogTitle>Save your current filters as a view</DialogTitle>
-
-        <DialogContent>
-
-          <TextField
-
-            autoFocus
-
-            margin="dense"
-
-            label="Name"
-
-            fullWidth
-
-            value={customViewKey}
-
-            onChange={(e) => setCustomViewKey(e.target.value)}
-
-          />
-
-          <TextField
-
-            margin="dense"
-
-            label="Description"
-
-            fullWidth
-
-            value={customViewDesc}
-
-            onChange={(e) => setCustomViewDesc(e.target.value)}
-
-          />
-
-          <Box>{RenderedFilters}</Box>
-
-        </DialogContent>
-
-        <DialogActions>
-
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-
-          <Button onClick={handleClickAdd}>Add</Button>
-
-        </DialogActions>
-
-      </Dialog>
-
-    </>
-
-  );
-
-};
-
-export default CardViews;
-
-
-
-i installed the npm lib in my local project and when i try to use CardViews i get:
-
-isMuiElement.js:7  Uncaught TypeError: Cannot read properties of undefined (reading 'muiName')     at isMuiElement (isMuiElement.js:7:16)     at createGrid.js:126:57     at react.development.js:455:21     at mapIntoArray (react.development.js:356:20)     at Object.mapChildren [as map] (react.development.js:454:7)     at Grid3 (createGrid.js:125:32)     at Object.react_stack_bottom_frame (react-dom-client.development.js:23863:20)     at renderWithHooks (react-dom-client.development.js:5529:22)     at updateForwardRef (react-dom-client.development.js:8645:19)     at beginWork (react-dom-client.development.js:10861:18)
+{
+  "name": "sdi-library",
+  "version": "1.1.4",
+  "description": "",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "files": [
+    "dist",
+    "dist/assets"
+  ],
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup && npm run copy-types && npm run copy-assets",
+    "copy-types": "cpy src/**/*.d.ts dist",
+    "copy-assets": "cpy src/assets/* dist/assets",
+    "pack": "npm run build && npm pack"
+  },
+  "publishConfig": {
+    "registry": "https://artifactory.cib.echonet/artifactory/api/npm/dmscockpit-npm/"
+  },
+  "author": "Simke Nys",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@fontsource/roboto": "^5.2.6",
+    "@mui/icons-material": "^7.3.1",
+    "@mui/material": "^7.3.1",
+    "@mui/x-data-grid": "^8.10.1",
+    "cpy-cli": "^5.0.0",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.1.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.8.0",
+    "react-scroll": "^1.9.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@fontsource/roboto": "^5.2.6",
+    "@mui/icons-material": "^7.3.1",
+    "@mui/material": "^7.3.1",
+    "@mui/x-data-grid": "^8.10.1",
+    "notistack": "^3.0.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.8.0",
+    "react-scroll": "^1.9.3"
+  },
+  "overrides": {
+    "@rollup/rollup-freebsd-arm64": "4.46.4"
+  }
+}
