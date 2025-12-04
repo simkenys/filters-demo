@@ -1,197 +1,425 @@
-import { useEffect, useRef } from "react";
+i export this from my npm lib:
+
+import React, { useState, useEffect } from 'react';
+
+import {
+
+  Card,
+
+  CardContent,
+
+  Typography,
+
+  Box,
+
+  Button,
+
+  ListItemIcon,
+
+  ListItemText,
+
+  ListItemButton,
+
+  List,
+
+  useTheme,
+
+  Dialog,
+
+  DialogTitle,
+
+  DialogContent,
+
+  TextField,
+
+  DialogActions,
+
+  useColorScheme,
+
+} from '@mui/material';
+
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+
+import InsightsIcon from '@mui/icons-material/Insights';
+
+import CloseIcon from '@mui/icons-material/Close';
+
 import { useSnackbar } from 'notistack';
 
-const useFilterUpdater = (
-  data,
-  id,
-  setFilters,
-  state,
-  setState,
-  defaultValue = null,
-  urlOverride = null
-) => {
-  const { enqueueSnackbar } = useSnackbar();
-  
-  // Track previous options to detect when they actually change
-  const prevOptionsRef = useRef(null);
-  const isInitialMount = useRef(true);
-  const hasProcessedUrlOverride = useRef(false);
-  const hasShownWarning = useRef(false);
+import useActiveFilters from '../../hooks/useActiveFilters';
 
-  useEffect(() => {
-    // Skip initial mount to avoid unnecessary updates
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      if (data && data.options) {
-        prevOptionsRef.current = data.options;
-      }
-      return;
-    }
+const noFilter = [];
 
-    // Don't process if data is not ready or is loading
-    if (!data) return;
+const activeCampaignFilter = [{ id: 'campaignActive', value: '0' }];
 
-    const newOptions = data.options || [];
-    const newOptionsLabels = data.optionsLabels || [];
-    const newOptionsSx = data.optionsSx || [];
+const initialViews = [
 
-    // CRITICAL FIX: Detect if options went from populated to empty
-    // This indicates a loading/fetching state, so we should preserve current state
-    const isLikelyLoading =
-      newOptions.length === 0 &&
-      prevOptionsRef.current !== null &&
-      prevOptionsRef.current.length > 0;
+  {
 
-    if (isLikelyLoading) {
-      // Don't update anything - wait for real data to arrive
-      return;
-    }
+    key: 'No filter',
 
-    // Check if options actually changed (not just re-rendered)
-    const optionsChanged =
-      JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
+    desc: 'Reset all filters to their default state',
 
-    // Update the reference only after we've decided to process this change
-    prevOptionsRef.current = newOptions;
+    filter: noFilter,
 
-    let updatedState;
-    let hadInvalidUrlOverride = false;
+  },
 
-    // Only use urlOverride if we haven't processed it yet and options are available
-    const shouldUseUrlOverride = urlOverride !== null && !hasProcessedUrlOverride.current && newOptions.length > 0;
-    
-    if (shouldUseUrlOverride) {
-      hasProcessedUrlOverride.current = true;
-    }
+  {
 
-    // Calculate the updated state based on new options
-    if (Array.isArray(state)) {
-      // ===== MULTI SELECT =====
+    key: 'Active Campaigns',
 
-      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
-      if (shouldUseUrlOverride && Array.isArray(urlOverride)) {
-        const validUrlValues = urlOverride.filter((d) =>
-          newOptions.includes(d)
-        );
-        const invalidUrlValues = urlOverride.filter((d) =>
-          !newOptions.includes(d)
-        );
-        
-        if (validUrlValues.length > 0) {
-          updatedState = validUrlValues;
-          // Log if some values were invalid
-          if (invalidUrlValues.length > 0) {
-            console.warn(`[${id}] Invalid URL values detected and removed:`, invalidUrlValues);
-            if (!hasShownWarning.current) {
-              enqueueSnackbar(`Invalid URL values for ${id}: ${invalidUrlValues.join(', ')}`, { 
-                variant: 'warning',
-                autoHideDuration: 5000 
-              });
-              hasShownWarning.current = true;
-            }
-          }
-        } else {
-          // All URL values are invalid, reset to default
-          console.warn(`[${id}] All URL values are invalid:`, invalidUrlValues);
-          if (!hasShownWarning.current) {
-            enqueueSnackbar(`All URL values for ${id} are invalid and were reset to default`, { 
-              variant: 'warning',
-              autoHideDuration: 5000 
-            });
-            hasShownWarning.current = true;
-          }
-          updatedState = defaultValue
-            ? [defaultValue]
-            : newOptions.length > 0
-            ? [newOptions[0]]
-            : [];
-          hadInvalidUrlOverride = true;
-        }
-      } else {
-        // PRIORITY 2: Try to preserve ALL current state values
-        const allCurrentValuesStillValid =
-          state.length > 0 && state.every((d) => newOptions.includes(d));
+    desc: 'Only show todos linked to an active campaign',
 
-        if (allCurrentValuesStillValid) {
-          // All values are still valid, keep the entire current state
-          updatedState = state;
-        } else {
-          // Some or all values are invalid, filter to valid ones or use default
-          const matchingStates = state.filter((d) => newOptions.includes(d));
+    filter: activeCampaignFilter,
 
-          if (matchingStates.length > 0) {
-            // Keep only the valid values
-            updatedState = matchingStates;
-          } else {
-            // No matches, use default or first option
-            updatedState = defaultValue
-              ? [defaultValue]
-              : newOptions.length > 0
-              ? [newOptions[0]]
-              : [];
-          }
-        }
-      }
-    } else {
-      // ===== SINGLE SELECT =====
+  },
 
-      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
-      if (shouldUseUrlOverride) {
-        const isUrlValid = newOptions.includes(urlOverride);
-        if (isUrlValid) {
-          updatedState = urlOverride;
-        } else {
-          // URL value is invalid, reset to default
-          console.warn(`[${id}] Invalid URL value:`, urlOverride);
-          if (!hasShownWarning.current) {
-            enqueueSnackbar(`Invalid URL value for ${id}: ${urlOverride}`, { 
-              variant: 'warning',
-              autoHideDuration: 5000 
-            });
-            hasShownWarning.current = true;
-          }
-          updatedState = defaultValue ?? newOptions[0] ?? "";
-          hadInvalidUrlOverride = true;
-        }
-      } else {
-        // PRIORITY 2: Try to preserve current state
-        const isStateValid = newOptions.includes(state);
+];
 
-        if (isStateValid) {
-          // Current state is valid, keep it
-          updatedState = state;
-        } else if (optionsChanged && newOptions.length > 0) {
-          // State invalid and options changed, use default or first option
-          updatedState = defaultValue ?? newOptions[0] ?? "";
-        } else {
-          // State invalid but options didn't change or no new options, keep current state
-          updatedState = state;
-        }
-      }
-    }
+const CardViews = ({filters, loadFilters}) => {
 
-    // Update filters with new options and calculated state
-    setFilters((prevFilters) =>
-      prevFilters.map((filter) => {
-        if (filter.id === id) {
-          return {
-            ...filter,
-            state: updatedState,
-            options: newOptions,
-            optionsLabels: newOptionsLabels,
-            optionsSx: newOptionsSx,
-          };
-        }
-        return filter;
-      })
-    );
+  const theme = useTheme();
 
-    // Update local state if it changed (outside of setFilters callback)
-    // FORCE update if we corrected an invalid URL override, even if state looks the same
-    if (hadInvalidUrlOverride || JSON.stringify(state) !== JSON.stringify(updatedState)) {
-      setState(updatedState);
-    }
-  }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
+  const [views, setViews] = useState(initialViews);
+
+  const [openDialog, setOpenDialog] = useState(false);
+
+  const [customViewKey, setCustomViewKey] = useState('');
+
+  const [customViewDesc, setCustomViewDesc] = useState('');
+
+  const { mode } = useColorScheme();
+
+  const { RenderedFilters, hasActiveFilters } = useActiveFilters(filters, mode);
+
+  const { enqueueSnackbar } = useSnackbar();
+
+  useEffect(() => {
+
+    const storedViews = Object.keys(localStorage)
+
+      .filter((key) => key.startsWith('customView_'))
+
+      .map((key) => JSON.parse(localStorage.getItem(key)));
+
+    if (storedViews.length > 0) {
+
+      setViews(() => [...initialViews, ...storedViews]);
+
+    }
+
+  }, []);
+
+  const handleClickAdd = () => {
+
+    const customFilter = [];
+
+    filters.map((d) => {
+
+      const keep =
+
+        d?.type !== 'title' &&
+
+        !(Array.isArray(d?.state) && d?.state.includes('-1')) &&
+
+        d?.state !== '-1';
+
+      if (keep) {
+
+        customFilter.push({ id: d?.id, value: d?.state });
+
+      }
+
+    });
+
+    const customView = {
+
+      key: customViewKey,
+
+      desc: customViewDesc,
+
+      filter: customFilter,
+
+      userMade: true,
+
+    };
+
+    localStorage.setItem(
+
+      `customView_${customViewKey}`,
+
+      JSON.stringify(customView)
+
+    );
+
+    setViews((prevViews) => {
+
+      // Remove the old custom view with the same key if it exists
+
+      const updatedViews = prevViews.filter(
+
+        (view) => view.key !== customViewKey
+
+      );
+
+      // Add the new custom view
+
+      return [...updatedViews, customView];
+
+    });
+
+    setOpenDialog(false);
+
+    enqueueSnackbar(`${customViewKey} saved`, { variant: 'success' });
+
+    resetKeys();
+
+  };
+
+  const handleOpenDialog = () => {
+
+    setOpenDialog(true);
+
+  };
+
+  const handleCloseDialog = () => {
+
+    setOpenDialog(false);
+
+    resetKeys();
+
+  };
+
+  const resetKeys = () => {
+
+    setCustomViewKey('');
+
+    setCustomViewDesc('');
+
+  };
+
+  return (
+
+    <>
+
+      <Card
+
+        sx={{
+
+          borderRadius: '12px',
+
+          padding: 1.5,
+
+          boxShadow: '0px 14px 40px rgba(34, 35, 58, 0.2)',
+
+          maxHeight: '75vh',
+
+          overflowY: 'auto',
+
+        }}>
+
+        <CardContent>
+
+          <Typography
+
+            gutterBottom
+
+            variant="h5"
+
+            component="div"
+
+            sx={{ color: theme.palette.primary.main }}>
+
+            Views
+
+          </Typography>
+
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+
+            Click on an item below to pre-apply filters across the whole site.
+
+          </Typography>
+
+          <Box sx={{ mt: '40px !important' }}>
+
+            <List>
+
+              {views.map((d) => {
+
+                return (
+
+                  <ListItemButton
+
+                    key={d?.key}
+
+                    onClick={() => {
+
+                      loadFilters(d?.filter);
+
+                      enqueueSnackbar(`${d?.key} preset loaded`, {
+
+                        variant: 'success',
+
+                      });
+
+                    }}
+
+                    sx={{ padding: 0 }}>
+
+                    <ListItemIcon>
+
+                      <InsightsIcon
+
+                        sx={{ color: theme.palette.secondary.main }}
+
+                      />
+
+                    </ListItemIcon>
+
+                    <ListItemText
+
+                      primary={d?.key}
+
+                      secondary={d?.desc ? d.desc : null}
+
+                    />
+
+                    {d?.userMade ? (
+
+                      <CloseIcon
+
+                        sx={{ color: 'red', cursor: 'pointer' }}
+
+                        onClick={(e) => {
+
+                          e.stopPropagation(); // Prevent the parent ListItemButton's onClick from firing
+
+                          localStorage.removeItem(`customView_${d.key}`);
+
+                          setViews((prevViews) =>
+
+                            prevViews.filter((view) => view.key !== d.key)
+
+                          );
+
+                          enqueueSnackbar(`${d?.key} deleted`, {
+
+                            variant: 'success',
+
+                          });
+
+                        }}
+
+                      />
+
+                    ) : (
+
+                      <CloseIcon sx={{ color: 'transparent' }} />
+
+                    )}
+
+                  </ListItemButton>
+
+                );
+
+              })}
+
+              <Box sx={{ height: '40px' }} />
+
+              <ListItemButton onClick={handleOpenDialog} sx={{ padding: 0 }}>
+
+                <ListItemIcon>
+
+                  <AddCircleOutlineIcon
+
+                    sx={{ color: theme.palette.primary.main }}
+
+                  />
+
+                </ListItemIcon>
+
+                <ListItemText
+
+                  primary={'Add your own view'}
+
+                  secondary={
+
+                    'Save your currently active filters as a custom view.'
+
+                  }
+
+                />
+
+              </ListItemButton>
+
+            </List>
+
+          </Box>
+
+        </CardContent>
+
+      </Card>
+
+      <Dialog open={openDialog} onClose={handleCloseDialog}>
+
+        <DialogTitle>Save your current filters as a view</DialogTitle>
+
+        <DialogContent>
+
+          <TextField
+
+            autoFocus
+
+            margin="dense"
+
+            label="Name"
+
+            fullWidth
+
+            value={customViewKey}
+
+            onChange={(e) => setCustomViewKey(e.target.value)}
+
+          />
+
+          <TextField
+
+            margin="dense"
+
+            label="Description"
+
+            fullWidth
+
+            value={customViewDesc}
+
+            onChange={(e) => setCustomViewDesc(e.target.value)}
+
+          />
+
+          <Box>{RenderedFilters}</Box>
+
+        </DialogContent>
+
+        <DialogActions>
+
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+
+          <Button onClick={handleClickAdd}>Add</Button>
+
+        </DialogActions>
+
+      </Dialog>
+
+    </>
+
+  );
+
 };
 
-export default useFilterUpdater;
+export default CardViews;
+
+
+
+i installed the npm lib in my local project and when i try to use CardViews i get:
+
+isMuiElement.js:7  Uncaught TypeError: Cannot read properties of undefined (reading 'muiName')     at isMuiElement (isMuiElement.js:7:16)     at createGrid.js:126:57     at react.development.js:455:21     at mapIntoArray (react.development.js:356:20)     at Object.mapChildren [as map] (react.development.js:454:7)     at Grid3 (createGrid.js:125:32)     at Object.react_stack_bottom_frame (react-dom-client.development.js:23863:20)     at renderWithHooks (react-dom-client.development.js:5529:22)     at updateForwardRef (react-dom-client.development.js:8645:19)     at beginWork (react-dom-client.development.js:10861:18)
