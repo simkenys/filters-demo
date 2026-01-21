@@ -1,57 +1,198 @@
-{
-  "name": "sdi-library",
-  "version": "1.1.4",
-  "description": "",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "files": [
-    "dist",
-    "dist/assets"
+tsup.config.js (of my personal library)
+-----------------------------------------------
+
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: ["src/index.jsx"],
+  format: ["esm"],
+  dts: true,
+  splitting: true,
+  treeshake: true,
+  sourcemap: true,
+  clean: true,
+  external: [
+    // --- React ---
+    "react",
+    "react-dom",
+    "react-router-dom",
+    "react-scroll",
+
+    // --- Emotion ---
+    "@emotion/react",
+    "@emotion/styled",
+
+    // --- MUI CORE v7
+    "@mui/material",
+    "@mui/system",
+    "@mui/utils",
+    "@mui/icons-material",
+
+    // --- MUI X v8 ---
+    "@mui/x-data-grid",
+    "@mui/x-date-pickers",
+
+    // --- Others ---
+    "@fontsource/roboto",
   ],
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsup && npm run copy-types && npm run copy-assets",
-    "copy-types": "cpy src/**/*.d.ts dist",
-    "copy-assets": "cpy src/assets/* dist/assets",
-    "pack": "npm run build && npm pack"
+  esbuildOptions(options) {
+    options.loader = {
+      ".jsx": "jsx",
+      ".png": "file",
+      ".jpg": "file",
+      ".jpeg": "file",
+      ".svg": "file",
+      ".gif": "file",
+    };
+    options.mainFields = ['module', 'main'];
+    options.conditions = ['module', 'import', 'default'];
   },
-  "publishConfig": {
-    "registry": "https://artifactory.cib.echonet/artifactory/api/npm/dmscockpit-npm/"
-  },
-  "author": "Simke Nys",
-  "license": "ISC",
-  "type": "commonjs",
-  "devDependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@fontsource/roboto": "^5.2.6",
-    "@mui/icons-material": "^7.3.1",
-    "@mui/material": "^7.3.1",
-    "@mui/x-data-grid": "^8.10.1",
-    "cpy-cli": "^5.0.0",
-    "postcss": "^8.5.6",
-    "postcss-loader": "^8.1.1",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-router-dom": "^7.8.0",
-    "react-scroll": "^1.9.3",
-    "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
-  },
-  "peerDependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@fontsource/roboto": "^5.2.6",
-    "@mui/icons-material": "^7.3.1",
-    "@mui/material": "^7.3.1",
-    "@mui/x-data-grid": "^8.10.1",
-    "notistack": "^3.0.2",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-router-dom": "^7.8.0",
-    "react-scroll": "^1.9.3"
-  },
-  "overrides": {
-    "@rollup/rollup-freebsd-arm64": "4.46.4"
+  esbuildPlugins: [
+    {
+      name: "css",
+      setup(build) {
+        build.onLoad({ filter: /\.css$/ }, async (args) => {
+          const contents = await fs.promises.readFile(args.path, "utf8");
+          return {
+            contents,
+            loader: "css",
+          };
+        });
+      },
+    },
+  ],
+});
+
+
+vite.config.js (of the project importing the library):
+-----------------------------------------------
+import { fileURLToPath, URL } from 'node:url';
+import { defineConfig } from 'vite';
+import plugin from '@vitejs/plugin-react';
+import fs from 'fs';
+import path from 'path';
+import child_process from 'child_process';
+import { env } from 'process';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
+// Enable to analyze chunks
+// import { visualizer } from 'rollup-plugin-visualizer'
+
+const baseFolder =
+  env.APPDATA !== undefined && env.APPDATA !== ''
+    ? `${env.APPDATA}/ASP.NET/https`
+    : `${env.HOME}/.aspnet/https`;
+
+const certificateName = 'react-mui.client';
+const certFilePath = path.join(baseFolder, `${certificateName}.pem`);
+const keyFilePath = path.join(baseFolder, `${certificateName}.key`);
+
+if (!fs.existsSync(baseFolder)) {
+  fs.mkdirSync(baseFolder, { recursive: true });
+}
+
+if (!fs.existsSync(certFilePath) || !fs.existsSync(keyFilePath)) {
+  if (
+    0 !==
+    child_process.spawnSync(
+      'dotnet',
+      [
+        'dev-certs',
+        'https',
+        '--export-path',
+        certFilePath,
+        '--format',
+        'Pem',
+        '--no-password',
+      ],
+      { stdio: 'inherit' }
+    ).status
+  ) {
+    throw new Error('Could not create certificate.');
   }
 }
+
+const target = env.ASPNETCORE_HTTPS_PORT
+  ? `https://localhost:${env.ASPNETCORE_HTTPS_PORT}`
+  : env.ASPNETCORE_URLS
+    ? env.ASPNETCORE_URLS.split(';')[0]
+    : 'https://localhost:7142';
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  optimizeDeps: {
+    include: ['react', 'react-dom', '@mui/icons-material']
+    // exclude: ['@mui/icons-material']
+  },
+  build: {
+    minify: true,
+    sourcemap: true,
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      treeshake: true,
+      output: {
+        manualChunks(id) {
+          if (id.includes('@mui/material')) {
+            return 'mui-material';
+          }
+          if (!id.includes('@mui/icons-material')) {
+            if (id.includes('@mui')) {
+              return 'mui';
+            }
+          }
+          if (id.includes('node_modules')) {
+            if (!id.includes('@mui/icons-material')) {
+
+              return id.toString().split('node_modules/')[1].split('/')[0].toString();
+            }
+          }
+        }
+      },
+    },
+  },
+  plugins: [
+    plugin(),
+    // Enable to analyze chunks
+    // visualizer({ filename: 'stats.html', template: 'treemap', open: false }),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'web.config',
+          dest: './',
+        },
+        {
+          src: './node_modules/sdi-library/dist/assets',
+          dest: './',
+        },
+        // {
+        //   src: './node_modules/@bnppf-ui-library/mfglobal-provider/build/mc_assets',
+        //   dest: './',
+        // },
+      ],
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))
+    },
+  },
+  server: {
+    port: parseInt(env.DEV_SERVER_PORT || '64224'),
+    https: {
+      key: fs.readFileSync(keyFilePath),
+      cert: fs.readFileSync(certFilePath),
+    },
+  },
+});
+
+
+
+Error after doing npm run build and publishing:
+----------------------------------------
+createSvgIcon.js:24 
+ Uncaught ReferenceError: Cannot access 'Rr' before initialization
+    at ue (createSvgIcon.js:24:23)
+    at index.js:3:36
+ue	@	createSvgIcon.js:24
+(anonymous)	@	index.js:3
+
+This is an error happening in mui v7.3.7
