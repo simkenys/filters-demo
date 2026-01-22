@@ -1,198 +1,154 @@
-tsup.config.js (of my personal library)
------------------------------------------------
+import React, { useEffect, useState } from 'react';
+import { Card, CardActionArea, CardContent, Typography } from '@mui/material';
+import useFetchBlobData from '../../dataHooks/useFetchBlobData';
+import { useGlobalStore } from '../../contexts/useGlobalStore';
+import useFetchUser from '../../dataHooks/useFetchUser';
+import { closeSnackbar, useSnackbar } from 'notistack';
 
-import { defineConfig } from "tsup";
+const CardDownload = () => {
+  const { enqueueSnackbar } = useSnackbar();
+  const [snackbarId, setSnackbarId] = useState(null);
 
-export default defineConfig({
-  entry: ["src/index.jsx"],
-  format: ["esm"],
-  dts: true,
-  splitting: true,
-  treeshake: true,
-  sourcemap: true,
-  clean: true,
-  external: [
-    // --- React ---
-    "react",
-    "react-dom",
-    "react-router-dom",
-    "react-scroll",
+  const { refogId } = useGlobalStore();
+  const { user } = useFetchUser({ refogId });
 
-    // --- Emotion ---
-    "@emotion/react",
-    "@emotion/styled",
+  const [fetchRequested, setFetchRequested] = useState(false);
 
-    // --- MUI CORE v7
-    "@mui/material",
-    "@mui/system",
-    "@mui/utils",
-    "@mui/icons-material",
+  const { data, error, isLoading } = useFetchBlobData(
+    fetchRequested ? user?.currentUser : null
+  );
 
-    // --- MUI X v8 ---
-    "@mui/x-data-grid",
-    "@mui/x-date-pickers",
+  useEffect(() => {
+    if (!isLoading && snackbarId !== null && fetchRequested) {
+      // ----- Guard: make sure we actually have a blob -----
+      const record = data?.[0];
+      if (!record?.blob) {
+        enqueueSnackbar('No XLSX data received.', { variant: 'error' });
+        closeSnackbar(snackbarId);
+        setSnackbarId(null);
+        setFetchRequested(false);
+        return;
+      }
 
-    // --- Others ---
-    "@fontsource/roboto",
-  ],
-  esbuildOptions(options) {
-    options.loader = {
-      ".jsx": "jsx",
-      ".png": "file",
-      ".jpg": "file",
-      ".jpeg": "file",
-      ".svg": "file",
-      ".gif": "file",
-    };
-    options.mainFields = ['module', 'main'];
-    options.conditions = ['module', 'import', 'default'];
-  },
-  esbuildPlugins: [
-    {
-      name: "css",
-      setup(build) {
-        build.onLoad({ filter: /\.css$/ }, async (args) => {
-          const contents = await fs.promises.readFile(args.path, "utf8");
-          return {
-            contents,
-            loader: "css",
-          };
-        });
-      },
-    },
-  ],
-});
+      // ----- Convert to Blob if needed -----
+      const xlsxBlob =
+        record.blob instanceof Blob
+          ? record.blob
+          : typeof record.blob === 'string'
+          ? // helper to turn base64 string into Blob
+            (() => {
+              const byteChars = atob(record.blob);
+              const byteNumbers = new Array(byteChars.length);
+              for (let i = 0; i < byteChars.length; i++) {
+                byteNumbers[i] = byteChars.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              return new Blob([byteArray], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              });
+            })()
+          : new Blob([record.blob]);
 
+      // ----- Create download link -----
+      const url = URL.createObjectURL(xlsxBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'extract.xlsx'; // you can customize the name
+      document.body.appendChild(a);
+      a.click();
 
-vite.config.js (of the project importing the library):
------------------------------------------------
-import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
-import plugin from '@vitejs/plugin-react';
-import fs from 'fs';
-import path from 'path';
-import child_process from 'child_process';
-import { env } from 'process';
-import { viteStaticCopy } from 'vite-plugin-static-copy';
-// Enable to analyze chunks
-// import { visualizer } from 'rollup-plugin-visualizer'
+      // Clean‑up (delay revocation to avoid race)
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        a.remove();
+      }, 0);
 
-const baseFolder =
-  env.APPDATA !== undefined && env.APPDATA !== ''
-    ? `${env.APPDATA}/ASP.NET/https`
-    : `${env.HOME}/.aspnet/https`;
+      // ----- UI feedback -----
+      closeSnackbar(snackbarId);
+      setSnackbarId('null');
+      enqueueSnackbar('XLSX data fetch finished!', {
+        variant: 'success',
+      });
+      setFetchRequested(false);
+    }
+  }, [isLoading, snackbarId, fetchRequested, enqueueSnackbar, data]);
 
-const certificateName = 'react-mui.client';
-const certFilePath = path.join(baseFolder, `${certificateName}.pem`);
-const keyFilePath = path.join(baseFolder, `${certificateName}.key`);
+  const handleCardClick = () => {
+    if (fetchRequested) return;
 
-if (!fs.existsSync(baseFolder)) {
-  fs.mkdirSync(baseFolder, { recursive: true });
-}
+    const id = enqueueSnackbar(
+      "XLSX data fetch started - please don't navigate away!",
+      {
+        variant: 'info',
+        persist: true,
+      }
+    );
+    setSnackbarId(id);
+    setFetchRequested(true);
+  };
 
-if (!fs.existsSync(certFilePath) || !fs.existsSync(keyFilePath)) {
-  if (
-    0 !==
-    child_process.spawnSync(
-      'dotnet',
-      [
-        'dev-certs',
-        'https',
-        '--export-path',
-        certFilePath,
-        '--format',
-        'Pem',
-        '--no-password',
-      ],
-      { stdio: 'inherit' }
-    ).status
-  ) {
-    throw new Error('Could not create certificate.');
-  }
-}
+  useEffect(() => {
+    return () => {
+      if (snackbarId !== null) {
+        closeSnackbar(snackbarId);
 
-const target = env.ASPNETCORE_HTTPS_PORT
-  ? `https://localhost:${env.ASPNETCORE_HTTPS_PORT}`
-  : env.ASPNETCORE_URLS
-    ? env.ASPNETCORE_URLS.split(';')[0]
-    : 'https://localhost:7142';
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  optimizeDeps: {
-    include: ['react', 'react-dom', '@mui/icons-material']
-    // exclude: ['@mui/icons-material']
-  },
-  build: {
-    minify: true,
-    sourcemap: true,
-    chunkSizeWarningLimit: 1600,
-    rollupOptions: {
-      treeshake: true,
-      output: {
-        manualChunks(id) {
-          if (id.includes('@mui/material')) {
-            return 'mui-material';
-          }
-          if (!id.includes('@mui/icons-material')) {
-            if (id.includes('@mui')) {
-              return 'mui';
-            }
-          }
-          if (id.includes('node_modules')) {
-            if (!id.includes('@mui/icons-material')) {
-
-              return id.toString().split('node_modules/')[1].split('/')[0].toString();
-            }
-          }
+        // // TODO:  Need to let this error only show when the user navigates away, now it also shows on success
+        if (fetchRequested) {
+          enqueueSnackbar('XLSX data fetch failed by navigating away!', {
+            variant: 'error',
+            persist: false,
+          });
         }
-      },
-    },
-  },
-  plugins: [
-    plugin(),
-    // Enable to analyze chunks
-    // visualizer({ filename: 'stats.html', template: 'treemap', open: false }),
-    viteStaticCopy({
-      targets: [
-        {
-          src: 'web.config',
-          dest: './',
-        },
-        {
-          src: './node_modules/sdi-library/dist/assets',
-          dest: './',
-        },
-        // {
-        //   src: './node_modules/@bnppf-ui-library/mfglobal-provider/build/mc_assets',
-        //   dest: './',
-        // },
-      ],
-    }),
-  ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    },
-  },
-  server: {
-    port: parseInt(env.DEV_SERVER_PORT || '64224'),
-    https: {
-      key: fs.readFileSync(keyFilePath),
-      cert: fs.readFileSync(certFilePath),
-    },
-  },
-});
+      }
+    };
+  }, [snackbarId, fetchRequested, enqueueSnackbar]);
 
+  // const handleCardClick = async () => {
+  // // From UNC Path
+  // const fileName = 'RAR_Download_d57718_2025-11-30.xlsx';
+  // const response = await fetch(
+  //   'api/Download?fileName=${encodeURIComponent(fileName)}',
+  //   {
+  //     method: 'GET',
+  //     credentials: 'include',
+  //   }
+  // );
+  // if (!response.ok) {
+  //   throw new Error('Download failed');
+  // }
+  // const blob = await response.blob();
+  // const url = window.URL.createObjectURL(blob);
+  // const a = document.createElement('a');
+  // a.href = url;
+  // a.download = fileName;
+  // document.body.appendChild(a);
+  // a.click();
+  // a.remove();
+  // };
 
+  return (
+    <Card
+      sx={{
+        borderRadius: '12px',
+        padding: 1.5,
+        boxShadow: '0px 14px 40px rgba(34, 35, 58, 0.2)',
+        cursor: 'pointer',
+      }}>
+      <CardActionArea
+        sx={{ height: '300px' }}
+        onClick={() => handleCardClick()}>
+        <CardContent>
+          <Typography gutterBottom variant="h5" component="div">
+            Download extract (.xlsx)
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Click here to download an extract in .xlsx format which contains all
+            data you are allowed to see.
+          </Typography>
+        </CardContent>
+      </CardActionArea>
+    </Card>
+  );
+};
 
-Error after doing npm run build and publishing:
-----------------------------------------
-createSvgIcon.js:24 
- Uncaught ReferenceError: Cannot access 'Rr' before initialization
-    at ue (createSvgIcon.js:24:23)
-    at index.js:3:36
-ue	@	createSvgIcon.js:24
-(anonymous)	@	index.js:3
-
-This is an error happening in mui v7.3.7
+export default CardDownload;
