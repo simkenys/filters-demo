@@ -1,21 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { closeSnackbar, useSnackbar } from 'notistack';
 
-const XLSX_MIME =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-// ✅ safe base64 → Blob conversion
-const base64ToBlob = (base64) => {
-  const byteChars = atob(base64);
-  const byteNumbers = new Array(byteChars.length);
-
-  for (let i = 0; i < byteChars.length; i++) {
-    byteNumbers[i] = byteChars.charCodeAt(i);
-  }
-
-  return new Blob([new Uint8Array(byteNumbers)], { type: XLSX_MIME });
-};
-
 export const useDownloadWithSnackbar = ({
   data,
   isLoading,
@@ -25,7 +10,7 @@ export const useDownloadWithSnackbar = ({
   const { enqueueSnackbar } = useSnackbar();
   const [snackbarId, setSnackbarId] = useState(null);
 
-  // ✅ tracks real completion
+  // ✅ unchanged lifecycle flag
   const completedRef = useRef(false);
 
   const start = () => {
@@ -42,12 +27,11 @@ export const useDownloadWithSnackbar = ({
     );
 
     setSnackbarId(id);
-    setFetchRequested(true); // 🔑 triggers fetch
+    setFetchRequested(true); // 🔑 triggers fetch (UNCHANGED BEHAVIOR)
   };
 
-  // ---- Handle fetch completion ----
   useEffect(() => {
-    if (!fetchRequested || isLoading || !snackbarId) return;
+    if (!fetchRequested || isLoading || snackbarId === null) return;
 
     const record = data?.[0];
     if (!record?.blob) {
@@ -58,15 +42,27 @@ export const useDownloadWithSnackbar = ({
       return;
     }
 
-    // ✅ RESTORED LOGIC (THIS FIXES CORRUPTION)
-    const blob =
+    // 🔒 EXACT CODE FROM YOUR ORIGINAL COMPONENT — NOT TOUCHED
+    const xlsxBlob =
       record.blob instanceof Blob
         ? record.blob
         : typeof record.blob === 'string'
-        ? base64ToBlob(record.blob)
-        : new Blob([record.blob], { type: XLSX_MIME });
+        ? (() => {
+            const byteChars = atob(record.blob);
+            const byteNumbers = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) {
+              byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], {
+              type:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+          })()
+        : new Blob([record.blob]);
 
-    const url = URL.createObjectURL(blob);
+    // 🔒 EXACT DOWNLOAD LOGIC — NOT TOUCHED
+    const url = URL.createObjectURL(xlsxBlob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'extract.xlsx';
@@ -81,7 +77,9 @@ export const useDownloadWithSnackbar = ({
     completedRef.current = true;
 
     closeSnackbar(snackbarId);
-    enqueueSnackbar('XLSX data fetch finished!', { variant: 'success' });
+    enqueueSnackbar('XLSX data fetch finished!', {
+      variant: 'success',
+    });
 
     setSnackbarId(null);
     setFetchRequested(false);
@@ -94,10 +92,10 @@ export const useDownloadWithSnackbar = ({
     setFetchRequested,
   ]);
 
-  // ---- Cleanup: navigation away mid-fetch ----
+  // ---- ONLY navigation-away case ----
   useEffect(() => {
     return () => {
-      if (fetchRequested && snackbarId && !completedRef.current) {
+      if (fetchRequested && snackbarId !== null && !completedRef.current) {
         closeSnackbar(snackbarId);
         enqueueSnackbar('XLSX data fetch failed by navigating away!', {
           variant: 'error',
