@@ -4,6 +4,18 @@ import { closeSnackbar, useSnackbar } from 'notistack';
 const XLSX_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+// ✅ safe base64 → Blob conversion
+const base64ToBlob = (base64) => {
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+
+  return new Blob([new Uint8Array(byteNumbers)], { type: XLSX_MIME });
+};
+
 export const useDownloadWithSnackbar = ({
   data,
   isLoading,
@@ -13,7 +25,7 @@ export const useDownloadWithSnackbar = ({
   const { enqueueSnackbar } = useSnackbar();
   const [snackbarId, setSnackbarId] = useState(null);
 
-  // ✅ tracks whether download actually finished
+  // ✅ tracks real completion
   const completedRef = useRef(false);
 
   const start = () => {
@@ -30,10 +42,10 @@ export const useDownloadWithSnackbar = ({
     );
 
     setSnackbarId(id);
-    setFetchRequested(true); // 🔑 THIS triggers fetch
+    setFetchRequested(true); // 🔑 triggers fetch
   };
 
-  // ---- Handle success ----
+  // ---- Handle fetch completion ----
   useEffect(() => {
     if (!fetchRequested || isLoading || !snackbarId) return;
 
@@ -46,9 +58,12 @@ export const useDownloadWithSnackbar = ({
       return;
     }
 
+    // ✅ RESTORED LOGIC (THIS FIXES CORRUPTION)
     const blob =
       record.blob instanceof Blob
         ? record.blob
+        : typeof record.blob === 'string'
+        ? base64ToBlob(record.blob)
         : new Blob([record.blob], { type: XLSX_MIME });
 
     const url = URL.createObjectURL(blob);
@@ -70,9 +85,16 @@ export const useDownloadWithSnackbar = ({
 
     setSnackbarId(null);
     setFetchRequested(false);
-  }, [data, isLoading, fetchRequested, snackbarId, enqueueSnackbar, setFetchRequested]);
+  }, [
+    data,
+    isLoading,
+    fetchRequested,
+    snackbarId,
+    enqueueSnackbar,
+    setFetchRequested,
+  ]);
 
-  // ---- Cleanup: only if navigated away mid-fetch ----
+  // ---- Cleanup: navigation away mid-fetch ----
   useEffect(() => {
     return () => {
       if (fetchRequested && snackbarId && !completedRef.current) {
@@ -86,52 +108,3 @@ export const useDownloadWithSnackbar = ({
 
   return { start };
 };
-
-
-import React, { useState } from 'react';
-import { Card, CardActionArea, CardContent, Typography } from '@mui/material';
-import useFetchBlobData from '../../dataHooks/useFetchBlobData';
-import { useGlobalStore } from '../../contexts/useGlobalStore';
-import useFetchUser from '../../dataHooks/useFetchUser';
-import { useDownloadWithSnackbar } from './useDownloadWithSnackbar';
-
-const CardDownload = () => {
-  const { refogId } = useGlobalStore();
-  const { user } = useFetchUser({ refogId });
-
-  const [fetchRequested, setFetchRequested] = useState(false);
-
-  // ✅ fetch only after click
-  const fetch = useFetchBlobData(
-    fetchRequested ? user?.currentUser : null
-  );
-
-  const { start } = useDownloadWithSnackbar({
-    data: fetch.data,
-    isLoading: fetch.isLoading,
-    fetchRequested,
-    setFetchRequested,
-  });
-
-  return (
-    <Card
-      sx={{
-        borderRadius: '12px',
-        padding: 1.5,
-        boxShadow: '0px 14px 40px rgba(34, 35, 58, 0.2)',
-        cursor: 'pointer',
-      }}
-    >
-      <CardActionArea sx={{ height: 300 }} onClick={start}>
-        <CardContent>
-          <Typography variant="h5">Download extract (.xlsx)</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Click here to download an extract in .xlsx format.
-          </Typography>
-        </CardContent>
-      </CardActionArea>
-    </Card>
-  );
-};
-
-export default CardDownload;
