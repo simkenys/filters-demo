@@ -4,17 +4,20 @@ import { closeSnackbar, useSnackbar } from 'notistack';
 const XLSX_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-export const useDownloadWithSnackbar = ({ data, isLoading }) => {
+export const useDownloadWithSnackbar = ({
+  data,
+  isLoading,
+  fetchRequested,
+  setFetchRequested,
+}) => {
   const { enqueueSnackbar } = useSnackbar();
-
   const [snackbarId, setSnackbarId] = useState(null);
-  const [requested, setRequested] = useState(false);
 
-  // ✅ lifecycle truth source
+  // ✅ tracks whether download actually finished
   const completedRef = useRef(false);
 
-  const startDownload = () => {
-    if (requested) return;
+  const start = () => {
+    if (fetchRequested) return;
 
     completedRef.current = false;
 
@@ -27,38 +30,27 @@ export const useDownloadWithSnackbar = ({ data, isLoading }) => {
     );
 
     setSnackbarId(id);
-    setRequested(true);
+    setFetchRequested(true); // 🔑 THIS triggers fetch
   };
 
-  // ---- Handle success / failure ----
+  // ---- Handle success ----
   useEffect(() => {
-    if (!requested || isLoading || !snackbarId) return;
+    if (!fetchRequested || isLoading || !snackbarId) return;
 
     const record = data?.[0];
     if (!record?.blob) {
       enqueueSnackbar('No XLSX data received.', { variant: 'error' });
       closeSnackbar(snackbarId);
       setSnackbarId(null);
-      setRequested(false);
+      setFetchRequested(false);
       return;
     }
 
-    // ----- Convert to Blob if needed -----
     const blob =
       record.blob instanceof Blob
         ? record.blob
-        : typeof record.blob === 'string'
-        ? (() => {
-            const bytes = atob(record.blob);
-            const arr = new Uint8Array(bytes.length);
-            for (let i = 0; i < bytes.length; i++) {
-              arr[i] = bytes.charCodeAt(i);
-            }
-            return new Blob([arr], { type: XLSX_MIME });
-          })()
         : new Blob([record.blob], { type: XLSX_MIME });
 
-    // ----- Download -----
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -71,37 +63,32 @@ export const useDownloadWithSnackbar = ({ data, isLoading }) => {
       a.remove();
     }, 0);
 
-    // ----- Success -----
     completedRef.current = true;
 
     closeSnackbar(snackbarId);
     enqueueSnackbar('XLSX data fetch finished!', { variant: 'success' });
 
     setSnackbarId(null);
-    setRequested(false);
-  }, [requested, isLoading, snackbarId, data, enqueueSnackbar]);
+    setFetchRequested(false);
+  }, [data, isLoading, fetchRequested, snackbarId, enqueueSnackbar, setFetchRequested]);
 
-  // ---- Cleanup: ONLY fire if navigated away mid-fetch ----
+  // ---- Cleanup: only if navigated away mid-fetch ----
   useEffect(() => {
     return () => {
-      if (requested && snackbarId && !completedRef.current) {
+      if (fetchRequested && snackbarId && !completedRef.current) {
         closeSnackbar(snackbarId);
         enqueueSnackbar('XLSX data fetch failed by navigating away!', {
           variant: 'error',
         });
       }
     };
-  }, [requested, snackbarId, enqueueSnackbar]);
+  }, [fetchRequested, snackbarId, enqueueSnackbar]);
 
-  return {
-    startDownload,
-    isDownloading: requested,
-  };
+  return { start };
 };
 
 
-
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardActionArea, CardContent, Typography } from '@mui/material';
 import useFetchBlobData from '../../dataHooks/useFetchBlobData';
 import { useGlobalStore } from '../../contexts/useGlobalStore';
@@ -112,9 +99,19 @@ const CardDownload = () => {
   const { refogId } = useGlobalStore();
   const { user } = useFetchUser({ refogId });
 
-  const fetch = useFetchBlobData(user?.currentUser ?? null);
+  const [fetchRequested, setFetchRequested] = useState(false);
 
-  const { startDownload, isDownloading } = useDownloadWithSnackbar(fetch);
+  // ✅ fetch only after click
+  const fetch = useFetchBlobData(
+    fetchRequested ? user?.currentUser : null
+  );
+
+  const { start } = useDownloadWithSnackbar({
+    data: fetch.data,
+    isLoading: fetch.isLoading,
+    fetchRequested,
+    setFetchRequested,
+  });
 
   return (
     <Card
@@ -125,18 +122,11 @@ const CardDownload = () => {
         cursor: 'pointer',
       }}
     >
-      <CardActionArea
-        sx={{ height: '300px' }}
-        onClick={startDownload}
-        disabled={isDownloading}
-      >
+      <CardActionArea sx={{ height: 300 }} onClick={start}>
         <CardContent>
-          <Typography gutterBottom variant="h5">
-            Download extract (.xlsx)
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Click here to download an extract in .xlsx format which contains all
-            data you are allowed to see.
+          <Typography variant="h5">Download extract (.xlsx)</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Click here to download an extract in .xlsx format.
           </Typography>
         </CardContent>
       </CardActionArea>
