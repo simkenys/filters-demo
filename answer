@@ -1,172 +1,147 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from 'react';
+import { closeSnackbar, useSnackbar } from 'notistack';
 
-const useFilterUpdater = (
-  data,
-  id,
-  setFilters,
-  state,
-  setState,
-  defaultValue = null,
-  urlOverride = null
-) => {
-  // Track previous options to detect when they actually change
-  const prevOptionsRef = useRef(null);
-  const isInitialMount = useRef(true);
-  const hasProcessedUrlOverride = useRef(false);
+const XLSX_MIME =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-  useEffect(() => {
-    // Skip initial mount to avoid unnecessary updates
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      if (data && data.options) {
-        prevOptionsRef.current = data.options;
+export const useDownloadWithSnackbar = ({ data, isLoading }) => {
+  const { enqueueSnackbar } = useSnackbar();
+
+  const [snackbarId, setSnackbarId] = useState(null);
+  const [requested, setRequested] = useState(false);
+
+  // ✅ lifecycle truth source
+  const completedRef = useRef(false);
+
+  const startDownload = () => {
+    if (requested) return;
+
+    completedRef.current = false;
+
+    const id = enqueueSnackbar(
+      "XLSX data fetch started - please don't navigate away!",
+      {
+        variant: 'info',
+        persist: true,
       }
-      return;
-    }
-
-    // Don't process if data is not ready or is loading
-    if (!data) return;
-
-    const newOptions = data.options || [];
-    const newOptionsLabels = data.optionsLabels || [];
-    const newOptionsSx = data.optionsSx || [];
-
-    // CRITICAL FIX: Detect if options went from populated to empty
-    // This indicates a loading/fetching state, so we should preserve current state
-    const isLikelyLoading =
-      newOptions.length === 0 &&
-      prevOptionsRef.current !== null &&
-      prevOptionsRef.current.length > 0;
-
-    if (isLikelyLoading) {
-      // Don't update anything - wait for real data to arrive
-      return;
-    }
-
-    // Check if options actually changed (not just re-rendered)
-    const optionsChanged =
-      JSON.stringify(prevOptionsRef.current) !== JSON.stringify(newOptions);
-
-    // Update the reference only after we've decided to process this change
-    prevOptionsRef.current = newOptions;
-
-    let updatedState;
-    let hadInvalidUrlOverride = false;
-
-    // Only use urlOverride if we haven't processed it yet and options are available
-    const shouldUseUrlOverride = urlOverride !== null && !hasProcessedUrlOverride.current && newOptions.length > 0;
-    
-    if (shouldUseUrlOverride) {
-      hasProcessedUrlOverride.current = true;
-    }
-
-    // Calculate the updated state based on new options
-    if (Array.isArray(state)) {
-      // ===== MULTI SELECT =====
-
-      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
-      if (shouldUseUrlOverride && Array.isArray(urlOverride)) {
-        const validUrlValues = urlOverride.filter((d) =>
-          newOptions.includes(d)
-        );
-        const invalidUrlValues = urlOverride.filter((d) =>
-          !newOptions.includes(d)
-        );
-        
-        if (validUrlValues.length > 0) {
-          updatedState = validUrlValues;
-          // Log if some values were invalid
-          if (invalidUrlValues.length > 0) {
-            console.warn(`[${id}] Invalid URL values detected and removed:`, invalidUrlValues);
-          }
-        } else {
-          // All URL values are invalid, reset to default
-          console.warn(`[${id}] All URL values are invalid:`, invalidUrlValues);
-          updatedState = defaultValue
-            ? [defaultValue]
-            : newOptions.length > 0
-            ? [newOptions[0]]
-            : [];
-          hadInvalidUrlOverride = true;
-        }
-      } else {
-        // PRIORITY 2: Try to preserve ALL current state values
-        const allCurrentValuesStillValid =
-          state.length > 0 && state.every((d) => newOptions.includes(d));
-
-        if (allCurrentValuesStillValid) {
-          // All values are still valid, keep the entire current state
-          updatedState = state;
-        } else {
-          // Some or all values are invalid, filter to valid ones or use default
-          const matchingStates = state.filter((d) => newOptions.includes(d));
-
-          if (matchingStates.length > 0) {
-            // Keep only the valid values
-            updatedState = matchingStates;
-          } else {
-            // No matches, use default or first option
-            updatedState = defaultValue
-              ? [defaultValue]
-              : newOptions.length > 0
-              ? [newOptions[0]]
-              : [];
-          }
-        }
-      }
-    } else {
-      // ===== SINGLE SELECT =====
-
-      // PRIORITY 1: Try to preserve URL override if it's valid (only once)
-      if (shouldUseUrlOverride) {
-        const isUrlValid = newOptions.includes(urlOverride);
-        if (isUrlValid) {
-          updatedState = urlOverride;
-        } else {
-          // URL value is invalid, reset to default
-          console.warn(`[${id}] Invalid URL value:`, urlOverride);
-          updatedState = defaultValue ?? newOptions[0] ?? "";
-          hadInvalidUrlOverride = true;
-        }
-      } else {
-        // PRIORITY 2: Try to preserve current state
-        const isStateValid = newOptions.includes(state);
-
-        if (isStateValid) {
-          // Current state is valid, keep it
-          updatedState = state;
-        } else if (optionsChanged && newOptions.length > 0) {
-          // State invalid and options changed, use default or first option
-          updatedState = defaultValue ?? newOptions[0] ?? "";
-        } else {
-          // State invalid but options didn't change or no new options, keep current state
-          updatedState = state;
-        }
-      }
-    }
-
-    // Update filters with new options and calculated state
-    setFilters((prevFilters) =>
-      prevFilters.map((filter) => {
-        if (filter.id === id) {
-          return {
-            ...filter,
-            state: updatedState,
-            options: newOptions,
-            optionsLabels: newOptionsLabels,
-            optionsSx: newOptionsSx,
-          };
-        }
-        return filter;
-      })
     );
 
-    // Update local state if it changed (outside of setFilters callback)
-    // FORCE update if we corrected an invalid URL override, even if state looks the same
-    if (hadInvalidUrlOverride || JSON.stringify(state) !== JSON.stringify(updatedState)) {
-      setState(updatedState);
+    setSnackbarId(id);
+    setRequested(true);
+  };
+
+  // ---- Handle success / failure ----
+  useEffect(() => {
+    if (!requested || isLoading || !snackbarId) return;
+
+    const record = data?.[0];
+    if (!record?.blob) {
+      enqueueSnackbar('No XLSX data received.', { variant: 'error' });
+      closeSnackbar(snackbarId);
+      setSnackbarId(null);
+      setRequested(false);
+      return;
     }
-  }, [data, id, setFilters, state, setState, defaultValue, urlOverride]);
+
+    // ----- Convert to Blob if needed -----
+    const blob =
+      record.blob instanceof Blob
+        ? record.blob
+        : typeof record.blob === 'string'
+        ? (() => {
+            const bytes = atob(record.blob);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) {
+              arr[i] = bytes.charCodeAt(i);
+            }
+            return new Blob([arr], { type: XLSX_MIME });
+          })()
+        : new Blob([record.blob], { type: XLSX_MIME });
+
+    // ----- Download -----
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'extract.xlsx';
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 0);
+
+    // ----- Success -----
+    completedRef.current = true;
+
+    closeSnackbar(snackbarId);
+    enqueueSnackbar('XLSX data fetch finished!', { variant: 'success' });
+
+    setSnackbarId(null);
+    setRequested(false);
+  }, [requested, isLoading, snackbarId, data, enqueueSnackbar]);
+
+  // ---- Cleanup: ONLY fire if navigated away mid-fetch ----
+  useEffect(() => {
+    return () => {
+      if (requested && snackbarId && !completedRef.current) {
+        closeSnackbar(snackbarId);
+        enqueueSnackbar('XLSX data fetch failed by navigating away!', {
+          variant: 'error',
+        });
+      }
+    };
+  }, [requested, snackbarId, enqueueSnackbar]);
+
+  return {
+    startDownload,
+    isDownloading: requested,
+  };
 };
 
-export default useFilterUpdater;
+
+
+import React from 'react';
+import { Card, CardActionArea, CardContent, Typography } from '@mui/material';
+import useFetchBlobData from '../../dataHooks/useFetchBlobData';
+import { useGlobalStore } from '../../contexts/useGlobalStore';
+import useFetchUser from '../../dataHooks/useFetchUser';
+import { useDownloadWithSnackbar } from './useDownloadWithSnackbar';
+
+const CardDownload = () => {
+  const { refogId } = useGlobalStore();
+  const { user } = useFetchUser({ refogId });
+
+  const fetch = useFetchBlobData(user?.currentUser ?? null);
+
+  const { startDownload, isDownloading } = useDownloadWithSnackbar(fetch);
+
+  return (
+    <Card
+      sx={{
+        borderRadius: '12px',
+        padding: 1.5,
+        boxShadow: '0px 14px 40px rgba(34, 35, 58, 0.2)',
+        cursor: 'pointer',
+      }}
+    >
+      <CardActionArea
+        sx={{ height: '300px' }}
+        onClick={startDownload}
+        disabled={isDownloading}
+      >
+        <CardContent>
+          <Typography gutterBottom variant="h5">
+            Download extract (.xlsx)
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Click here to download an extract in .xlsx format which contains all
+            data you are allowed to see.
+          </Typography>
+        </CardContent>
+      </CardActionArea>
+    </Card>
+  );
+};
+
+export default CardDownload;
