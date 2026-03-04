@@ -1,1 +1,121 @@
+import { useEffect, useRef, useState } from 'react';
+import { closeSnackbar, useSnackbar } from 'notistack';
+import { trackError, useDigitalDataClickAction } from 'sdi-library';
+import { useGlobalStore } from '../contexts/useGlobalStore';
+
+const XLSX_MIME =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// safe base64 → Blob conversion
+const base64ToBlob = (base64) => {
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+
+  return new Blob([new Uint8Array(byteNumbers)], { type: XLSX_MIME });
+};
+
+export const useDownloadWithSnackbar = ({
+  data,
+  isLoading,
+  fetchRequested,
+  setFetchRequested,
+}) => {
+  const { enqueueSnackbar } = useSnackbar();
+  const [snackbarId, setSnackbarId] = useState(null);
+  const { adobeTrackingName } = useGlobalStore();
+
+  // tracks real completion
+  const completedRef = useRef(false);
+  const trackDownload = useDigitalDataClickAction('download-extract');
+
+  const start = () => {
+    if (fetchRequested) return;
+
+    trackDownload();
+    completedRef.current = false;
+
+    const id = enqueueSnackbar(
+      "XLSX data fetch started - please don't navigate away!",
+      {
+        variant: 'info',
+        persist: true,
+      }
+    );
+
+    setSnackbarId(id);
+    setFetchRequested(true); // triggers fetch
+  };
+
+  // ---- Handle fetch completion ----
+  useEffect(() => {
+    if (!fetchRequested || isLoading || !snackbarId) return;
+
+    const record = data?.[0];
+    if (!record?.blob) {
+      enqueueSnackbar('No XLSX data received.', { variant: 'error' });
+      closeSnackbar(snackbarId);
+      setSnackbarId(null);
+      setFetchRequested(false);
+      return;
+    }
+
+    const blob =
+      record.blob instanceof Blob
+        ? record.blob
+        : typeof record.blob === 'string'
+          ? base64ToBlob(record.blob)
+          : new Blob([record.blob], { type: XLSX_MIME });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = record.fileName.trim();
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 0);
+
+    completedRef.current = true;
+
+    closeSnackbar(snackbarId);
+    enqueueSnackbar('XLSX data fetch finished!', { variant: 'success' });
+
+    setSnackbarId(null);
+    setFetchRequested(false);
+  }, [
+    data,
+    isLoading,
+    fetchRequested,
+    snackbarId,
+    enqueueSnackbar,
+    setFetchRequested,
+  ]);
+
+  // ---- Cleanup: navigation away mid-fetch ----
+  useEffect(() => {
+    return () => {
+      if (fetchRequested && snackbarId && !completedRef.current) {
+        trackError(
+          adobeTrackingName,
+          499,
+          'User navigated away before finishing download',
+          'download-extract'
+        );
+        closeSnackbar(snackbarId);
+        enqueueSnackbar('XLSX data fetch failed by navigating away!', {
+          variant: 'error',
+        });
+      }
+    };
+  }, [fetchRequested, snackbarId, enqueueSnackbar, adobeTrackingName]);
+
+  return { start };
+};
 
