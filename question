@@ -1,1 +1,108 @@
+export const useDownloadWithSnackbar = ({
+  data,
+  isLoading,
+  fetchRequested,
+  setFetchRequested,
+}) => {
+  const { enqueueSnackbar } = useSnackbar();
+  const [snackbarId, setSnackbarId] = useState(null);
+  const { adobeTrackingName } = useGlobalStore();
 
+  const completedRef = useRef(false);
+  const handledRef = useRef(false); // NEW: tracks if we've handled the result
+  const trackDownload = useDigitalDataClickAction('download-extract');
+
+  const start = () => {
+    if (fetchRequested) return;
+
+    trackDownload();
+    completedRef.current = false;
+    handledRef.current = false; // Reset on new fetch
+
+    const id = enqueueSnackbar(
+      "XLSX data fetch started - please don't navigate away!",
+      {
+        variant: 'info',
+        persist: true,
+      }
+    );
+
+    setSnackbarId(id);
+    setFetchRequested(true);
+  };
+
+  // ---- Handle fetch completion ----
+  useEffect(() => {
+    if (!fetchRequested || isLoading || !snackbarId) return;
+
+    const record = data?.[0];
+    if (!record?.blob) {
+      handledRef.current = true; // Mark as handled
+      completedRef.current = true;
+      
+      enqueueSnackbar('No XLSX data received.', { variant: 'error' });
+      closeSnackbar(snackbarId);
+      setSnackbarId(null);
+      setFetchRequested(false);
+      return;
+    }
+
+    const blob =
+      record.blob instanceof Blob
+        ? record.blob
+        : typeof record.blob === 'string'
+          ? base64ToBlob(record.blob)
+          : new Blob([record.blob], { type: XLSX_MIME });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = record.fileName.trim();
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 0);
+
+    handledRef.current = true; // Mark as handled
+    completedRef.current = true;
+
+    closeSnackbar(snackbarId);
+    enqueueSnackbar('XLSX data fetch finished!', { variant: 'success' });
+
+    setSnackbarId(null);
+    setFetchRequested(false);
+  }, [
+    data,
+    isLoading,
+    fetchRequested,
+    snackbarId,
+    enqueueSnackbar,
+    setFetchRequested,
+  ]);
+
+  // ---- Cleanup: navigation away mid-fetch ----
+  useEffect(() => {
+    return () => {
+      // Only fire if we started a fetch but never handled the result
+      if (fetchRequested && !handledRef.current) {
+        trackError(
+          adobeTrackingName,
+          499,
+          'User navigated away before finishing download',
+          'download-extract'
+        );
+        if (snackbarId) {
+          closeSnackbar(snackbarId);
+        }
+        enqueueSnackbar('XLSX data fetch failed by navigating away!', {
+          variant: 'error',
+        });
+      }
+    };
+  }, [fetchRequested, snackbarId, enqueueSnackbar, adobeTrackingName]);
+
+  return { start };
+};
