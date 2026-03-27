@@ -1,1 +1,995 @@
+src/theme.js:
+import { createTheme } from '@mui/material';
+
+const colorSchemes = {
+  light: {
+    scrollbar: {
+      track: '#FAFAFA',
+      thumb: '#C8C8C8',
+      thumbHover: '#aaa',
+    },
+  },
+  dark: {
+    scrollbar: {
+      track: '#333',
+      thumb: '#666',
+      thumbHover: '#888',
+    },
+  },
+};
+
+export const theme = createTheme({
+  colorSchemes: {
+    light: {
+      palette: {
+        primary: {
+          main: 'rgb(0, 150, 94)',
+        },
+        secondary: {
+          main: 'rgb(13, 218, 143)',
+        },
+        bnp: {
+          main: 'rgb(0, 150, 94)',
+        },
+      },
+    },
+
+    dark: {
+      palette: {
+        primary: {
+          main: 'rgb(13, 218, 143)',
+        },
+        secondary: {
+          main: 'rgb(13, 218, 143)',
+        },
+        bnp: {
+          main: 'rgb(0, 150, 94)',
+        },
+        background: {
+          paper: '#343434',
+          default: '#232323',
+        },
+      },
+      components: {
+        AppBar: {
+          styleOverrides: {
+            paper: {
+              variants: [
+                {
+                  props: { elevation: 0 },
+                  style: { '--Paper-overlay': 'none' },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+  },
+
+  typography: {
+    fontFamily: 'Arial', // 'bnpp_sans, Arial',
+    fontSize: 14,
+  },
+
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: (props) => `
+        *::-webkit-scrollbar {
+          width: 0.4em;
+          height: 0.6em;
+        }
+        *::-webkit-scrollbar-track {
+          background: ${
+            props.palette.mode === 'light'
+              ? colorSchemes.light.scrollbar.track
+              : colorSchemes.dark.scrollbar.track
+          };
+          border-radius: 8px;
+        }
+        *::-webkit-scrollbar-thumb {
+          background-color: ${
+            props.palette.mode === 'light'
+              ? colorSchemes.light.scrollbar.thumb
+              : colorSchemes.dark.scrollbar.thumb
+          };
+          border-radius: 8px;
+        }
+        *::-webkit-scrollbar-thumb:hover {
+          background: ${
+            props.palette.mode === 'light'
+              ? colorSchemes.light.scrollbar.thumbHover
+              : colorSchemes.dark.scrollbar.thumbHover
+          };
+        }
+      `,
+    },
+  },
+});
+
+
+src/components/alerts/AlertItem.jsx:
+// src/components/alerts/AlertItem.jsx
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Box, Typography, Chip, useTheme, Rating } from '@mui/material';
+import useFetcher from 'src/hooks/useFetcher';
+import { ratingUrl } from 'src/utils/apiHelpers';
+
+/**
+ * Props:
+ *   - alert   : the alert object (contains `id`, `objectID`, `rating`, …)
+ *   - mutate  : SWR mutate function (bound to the alerts cache key)
+ */
+export default function AlertItem({ alert, mutate }) {
+  const theme = useTheme();
+  const fetcher = useFetcher();
+
+  // -----------------------------------------------------------------
+  // Local rating state – kept in sync with the alert object for
+  // optimistic UI updates.
+  // -----------------------------------------------------------------
+  const [rating, setRating] = useState(alert.rating?.rating ?? 0);
+  useEffect(() => {
+    setRating(alert.rating?.rating ?? 0);
+  }, [alert.rating]);
+
+  // -----------------------------------------------------------------
+  // Format the alert date as yyyy‑mm‑dd (no time part)
+  // -----------------------------------------------------------------
+  const formattedDate = useMemo(() => {
+    if (!alert.date) return '';
+    // Handles both ISO strings and Date objects
+    const d = new Date(alert.date);
+    // Guard against invalid dates
+    if (Number.isNaN(d.getTime())) return alert.date;
+    return d.toISOString().split('T')[0]; // “2026-02-06”
+  }, [alert.date]);
+
+  // -----------------------------------------------------------------
+  // Build the payload exactly like the legacy code expects.
+  // -----------------------------------------------------------------
+  const buildPayload = useCallback(
+    (newRating) => ({
+      objectID: String(alert.objectID), // original primary key
+      type: 'alert',
+      rating1: newRating,
+      comment: `${newRating} star${newRating > 1 ? 's' : ''}`,
+      date: new Date().toISOString(),
+    }),
+    [alert.objectID]
+  );
+
+  // -----------------------------------------------------------------
+  // Persist rating, then optimistically update the SWR cache.
+  // -----------------------------------------------------------------
+  const saveRating = async (newRating) => {
+    try {
+      const payload = buildPayload(newRating);
+      const responseData = await fetcher(ratingUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const savedRating = responseData.rating; // { rating: <number> }
+
+      // Optimistic UI – update local state instantly
+      setRating(savedRating);
+
+      // -------------------------------------------------------------
+      // 1️⃣ Optimistically update the cached alerts list (no immediate fetch)
+      // -------------------------------------------------------------
+      mutate(
+        (cachedAlerts) => {
+          if (!cachedAlerts) return cachedAlerts;
+          return cachedAlerts.map((a) =>
+            a.id === alert.id
+              ? {
+                  ...a,
+                  rating: {
+                    rating: savedRating,
+                    comment: `${savedRating} star${savedRating > 1 ? 's' : ''}`,
+                  },
+                }
+              : a
+          );
+        },
+        false // do NOT trigger a fetch right now
+      );
+
+      // -------------------------------------------------------------
+      // 2️⃣ Trigger a background re‑validation so the cache eventually
+      //    reflects the authoritative server value.
+      // -------------------------------------------------------------
+      mutate(); // <-- no second argument → SWR will re‑fetch silently
+    } catch (e) {
+      console.error('Failed to save rating:', e);
+    }
+  };
+
+  const handleRatingChange = (event, newValue) => {
+    // Optimistic UI – update instantly
+    setRating(newValue);
+    saveRating(newValue);
+  };
+
+  const isGeneral = alert.type === 'General';
+  const isEBB = alert.type === 'EBB';
+
+  // -----------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------
+  return (
+    <Box
+      p={2}
+      mb={1}
+      mr={1}
+      border={`1px solid ${theme.palette.divider}`}
+      borderRadius={2}
+      sx={{
+        backgroundColor: '#515151',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        '&:hover': { backgroundColor: theme.palette.action.hover },
+      }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ fontSize: '12px !important' }}>
+          {formattedDate}
+        </Typography>
+
+        <Chip
+          label={alert.type}
+          size="small"
+          variant="filled"
+          {...(alert.type === 'General' ? { color: 'primary' } : {})}
+          sx={{
+            fontSize: '12px !important',
+            maxWidth: 120,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            '& .MuiChip-label': {
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            },
+            ...(alert.type === 'EBB' && {
+              backgroundColor: '#f6ffb0',
+              color: '#000',
+            }),
+            ...(alert.type !== 'General' &&
+              alert.type !== 'EBB' && {
+                backgroundColor: '#ffb0b0',
+                color: '#000',
+              }),
+          }}
+        />
+      </Box>
+
+      <Box sx={{ flexGrow: 1 }}>
+        <Typography variant="body1" sx={{ mt: 1, fontSize: '12px !important' }}>
+          {alert.desc}
+        </Typography>
+      </Box>
+
+      {/* Rating UI ---------------------------------------------------------- */}
+      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center' }}>
+        <Rating
+          name={`alert-rating-${alert.id}`}
+          value={rating}
+          max={5}
+          size="small"
+          onChange={handleRatingChange}
+        />
+        <Typography
+          variant="caption"
+          sx={{ ml: 0.5, fontSize: '12px !important' }}>
+          {rating === 0 ? 'Rate to archive' : `${rating} / 5`}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+src/components/alerts/AlertsList.jsx:
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  Chip,
+  Paper,
+  useTheme,
+  Grid,
+} from '@mui/material';
+import AlertItem from './AlertItem';
+import useUserInfo from 'src/hooks/useUserInfo';
+
+export default function AlertsList({
+  filteredAlerts,
+  mutate,
+  url,
+  search,
+  setSearch,
+  selectedTypes,
+  toggleType,
+  toggleGroup,
+  typeGroups,
+}) {
+  const theme = useTheme();
+
+  // ---- get user info --------------------------------------------------------
+  const { userInfo } = useUserInfo(); // { isImpersonating, positionUserName, … }
+
+  // ---- title logic ---------------------------
+  const pageTitle = (() => {
+    const { isImpersonating, positionUserName, portfolioType } = userInfo;
+
+    if (!isImpersonating) {
+      // not impersonating – title depends on the current user's portfolio type
+      switch (portfolioType) {
+        case 'client':
+          return 'My Alerts';
+        case 'unit':
+          return "My Entity's Alerts";
+        default:
+          return 'My Alerts'; // fallback
+      }
+    } else {
+      // impersonating – we show the impersonated user’s name
+      const name = positionUserName; // already the name of the impersonated position
+      switch (portfolioType) {
+        case 'client':
+          return `Alerts of ${name}`;
+        case 'unit':
+          return `Entity's Alerts of ${name}`;
+        default:
+          return `Alerts of ${name}`; // fallback
+      }
+    }
+  })();
+  // ---------------------------------------------------------------------------
+
+  // active chips (group‑level + individual) – same logic as before
+  const groupChips = typeGroups
+    .filter((g) => g.types.every((t) => selectedTypes.includes(t)))
+    .map((g) => (
+      <Chip
+        size="small"
+        key={g.name}
+        label={g.name}
+        onDelete={() => toggleGroup(g)}
+        sx={{ fontSize: '12px !important' }}
+      />
+    ));
+
+  const typeChips = selectedTypes
+    .filter(
+      (t) =>
+        !typeGroups.some(
+          (g) =>
+            g.types.includes(t) &&
+            g.types.every((tt) => selectedTypes.includes(tt))
+        )
+    )
+    .map((type) => (
+      <Chip
+        size="small"
+        key={type}
+        label={type}
+        onDelete={() => toggleType(type)}
+        sx={{ fontSize: '12px !important' }}
+      />
+    ));
+
+  return (
+    <>
+      {/* title */}
+      <Box>
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{
+            fontSize: '15px !important',
+            fontWeight: 'bold',
+            color: theme.palette.primary.main,
+            pb: 2,
+          }}>
+          {pageTitle}
+        </Typography>
+      </Box>
+
+      {/* search + chips */}
+      <Box>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search alerts..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{
+            mb: 2,
+            '& .MuiInputBase-input': {
+              fontSize: '12px !important',
+              width: '100%',
+            },
+            '& .MuiInputLabel-root': { fontSize: '12px !important', mr: 1 },
+          }}
+        />
+
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          {groupChips}
+          {typeChips}
+        </Box>
+
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{ fontSize: '12px !important' }}>
+          Alerts ({filteredAlerts.length})
+        </Typography>
+      </Box>
+
+      {/* scrollable list */}
+      <Paper
+        elevation={0}
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          mt: 1,
+          p: 0,
+          backgroundColor: 'transparent',
+        }}>
+        <Grid container spacing={2} alignItems="stretch">
+          {filteredAlerts.map((alert) => (
+            <Grid key={alert.id} size={{ xs: 12, sm: 12, md: 6, lg: 4, xl: 3 }}>
+              <AlertItem alert={alert} mutate={mutate} />
+            </Grid>
+          ))}
+        </Grid>
+      </Paper>
+    </>
+  );
+}
+
+src/components/alerts/AlertsMain.jsx:
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  Chip,
+  Paper,
+  useTheme,
+  Grid,
+} from '@mui/material';
+import AlertItem from './AlertItem';
+import useUserInfo from 'src/hooks/useUserInfo';
+
+export default function AlertsList({
+  filteredAlerts,
+  mutate,
+  url,
+  search,
+  setSearch,
+  selectedTypes,
+  toggleType,
+  toggleGroup,
+  typeGroups,
+}) {
+  const theme = useTheme();
+
+  // ---- get user info --------------------------------------------------------
+  const { userInfo } = useUserInfo(); // { isImpersonating, positionUserName, … }
+
+  // ---- title logic ---------------------------
+  const pageTitle = (() => {
+    const { isImpersonating, positionUserName, portfolioType } = userInfo;
+
+    if (!isImpersonating) {
+      // not impersonating – title depends on the current user's portfolio type
+      switch (portfolioType) {
+        case 'client':
+          return 'My Alerts';
+        case 'unit':
+          return "My Entity's Alerts";
+        default:
+          return 'My Alerts'; // fallback
+      }
+    } else {
+      // impersonating – we show the impersonated user’s name
+      const name = positionUserName; // already the name of the impersonated position
+      switch (portfolioType) {
+        case 'client':
+          return `Alerts of ${name}`;
+        case 'unit':
+          return `Entity's Alerts of ${name}`;
+        default:
+          return `Alerts of ${name}`; // fallback
+      }
+    }
+  })();
+  // ---------------------------------------------------------------------------
+
+  // active chips (group‑level + individual) – same logic as before
+  const groupChips = typeGroups
+    .filter((g) => g.types.every((t) => selectedTypes.includes(t)))
+    .map((g) => (
+      <Chip
+        size="small"
+        key={g.name}
+        label={g.name}
+        onDelete={() => toggleGroup(g)}
+        sx={{ fontSize: '12px !important' }}
+      />
+    ));
+
+  const typeChips = selectedTypes
+    .filter(
+      (t) =>
+        !typeGroups.some(
+          (g) =>
+            g.types.includes(t) &&
+            g.types.every((tt) => selectedTypes.includes(tt))
+        )
+    )
+    .map((type) => (
+      <Chip
+        size="small"
+        key={type}
+        label={type}
+        onDelete={() => toggleType(type)}
+        sx={{ fontSize: '12px !important' }}
+      />
+    ));
+
+  return (
+    <>
+      {/* title */}
+      <Box>
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{
+            fontSize: '15px !important',
+            fontWeight: 'bold',
+            color: theme.palette.primary.main,
+            pb: 2,
+          }}>
+          {pageTitle}
+        </Typography>
+      </Box>
+
+      {/* search + chips */}
+      <Box>
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search alerts..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{
+            mb: 2,
+            '& .MuiInputBase-input': {
+              fontSize: '12px !important',
+              width: '100%',
+            },
+            '& .MuiInputLabel-root': { fontSize: '12px !important', mr: 1 },
+          }}
+        />
+
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          {groupChips}
+          {typeChips}
+        </Box>
+
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{ fontSize: '12px !important' }}>
+          Alerts ({filteredAlerts.length})
+        </Typography>
+      </Box>
+
+      {/* scrollable list */}
+      <Paper
+        elevation={0}
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          mt: 1,
+          p: 0,
+          backgroundColor: 'transparent',
+        }}>
+        <Grid container spacing={2} alignItems="stretch">
+          {filteredAlerts.map((alert) => (
+            <Grid key={alert.id} size={{ xs: 12, sm: 12, md: 6, lg: 4, xl: 3 }}>
+              <AlertItem alert={alert} mutate={mutate} />
+            </Grid>
+          ))}
+        </Grid>
+      </Paper>
+    </>
+  );
+}
+
+src/components/alerts/ArchivedFilter.jsx:
+import React from 'react';
+import {
+  Divider,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  useTheme,
+} from '@mui/material';
+
+export default function ArchivedFilter({ archive, setArchive }) {
+  const theme = useTheme();
+
+  const smallControlSx = {
+    fontSize: '12px !important',
+    '& .MuiSvgIcon-root': { fontSize: '12px !important' },
+  };
+
+  return (
+    <>
+      <Divider sx={{ mb: 1 }} />
+      <RadioGroup
+        value={String(archive)}
+        onChange={(e) => setArchive(Number(e.target.value))}
+        sx={{ pl: 1 }}>
+        {/* 0 – active only */}
+        <FormControlLabel
+          value="0"
+          control={<Radio size="small" sx={smallControlSx} />}
+          label="Active only"
+          sx={{
+            ml: 0,
+            '& .MuiFormControlLabel-label': { fontSize: '12px !important' },
+          }}
+        />
+        {/* 1 – archived only */}
+        <FormControlLabel
+          value="1"
+          control={<Radio size="small" sx={smallControlSx} />}
+          label="Archived only"
+          sx={{
+            ml: 0,
+            '& .MuiFormControlLabel-label': { fontSize: '12px !important' },
+          }}
+        />
+        {/* 2 – show everything */}
+        <FormControlLabel
+          value="2"
+          control={<Radio size="small" sx={smallControlSx} />}
+          label="All (active + archived)"
+          sx={{
+            ml: 0,
+            '& .MuiFormControlLabel-label': { fontSize: '12px !important' },
+          }}
+        />
+      </RadioGroup>
+    </>
+  );
+}
+
+src/components/alerts/DateFilter.jsx:
+import React from 'react';
+import {
+  Divider,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  useTheme,
+} from '@mui/material';
+
+export default function DateFilter({ dateFilter, setDateFilter }) {
+  const theme = useTheme();
+
+  const smallControlSx = {
+    fontSize: '12px !important',
+    '& .MuiSvgIcon-root': { fontSize: '12px !important' },
+  };
+
+  return (
+    <>
+      <Divider sx={{ mb: 1 }} />
+      <RadioGroup
+        value={dateFilter}
+        onChange={(e) => setDateFilter(e.target.value)}
+        sx={{ pl: 1 }}>
+        {['7d', '30d', 'all'].map((val) => (
+          <FormControlLabel
+            key={val}
+            value={val}
+            control={<Radio size="small" sx={smallControlSx} />}
+            label={
+              val === '7d'
+                ? 'Last 7 days'
+                : val === '30d'
+                  ? 'Last 30 days'
+                  : 'All'
+            }
+            sx={{
+              ml: 0,
+              '& .MuiFormControlLabel-label': { fontSize: '12px !important' },
+            }}
+          />
+        ))}
+      </RadioGroup>
+    </>
+  );
+}
+
+src/components/alerts/FiltersSidebar.jsx:
+import React from 'react';
+import {
+  Box,
+  Typography,
+  Button,
+  IconButton,
+  Divider,
+  Collapse,
+  useTheme,
+} from '@mui/material';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import TypeFilters from './TypeFilters';
+import DateFilter from './DateFilter';
+import ArchivedFilter from './ArchivedFilter'; // <-- new import
+
+export default function FiltersSidebar(props) {
+  const {
+    clearAll,
+    openTypes,
+    setOpenTypes,
+    openDate,
+    setOpenDate,
+    openGroups,
+    setOpenGroups,
+    // NEW – archive state
+    archive,
+    setArchive,
+    // pass‑through props needed by children
+    ...rest
+  } = props;
+
+  const theme = useTheme();
+
+  return (
+    <Box
+      width={300}
+      p={2}
+      borderRight={`1px solid ${theme.palette.divider}`}
+      sx={{
+        position: 'sticky',
+        top: 0,
+        height: '100%',
+        overflow: 'auto',
+      }}>
+      {/* Header ----------------------------------------------------------- */}
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Typography variant="h6" sx={{ fontSize: '12px !important' }}>
+          Filters
+        </Typography>
+        <Button
+          size="small"
+          onClick={clearAll}
+          sx={{ fontSize: '12px !important' }}>
+          Clear
+        </Button>
+      </Box>
+
+      {/* Alert Types ------------------------------------------------------- */}
+      <Box mt={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="subtitle2" sx={{ fontSize: '12px !important' }}>
+            ALERT TYPE
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setOpenTypes(!openTypes)}
+            sx={{ p: 0 }}>
+            {openTypes ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </Box>
+
+        <Collapse in={openTypes}>
+          <Divider sx={{ mb: 1 }} />
+          <TypeFilters
+            {...rest}
+            openGroups={openGroups}
+            setOpenGroups={setOpenGroups}
+          />
+        </Collapse>
+      </Box>
+
+      {/* Date -------------------------------------------------------------- */}
+      <Box mt={3}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="subtitle2" sx={{ fontSize: '12px !important' }}>
+            DATE
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setOpenDate(!openDate)}
+            sx={{ p: 0 }}>
+            {openDate ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </Box>
+
+        <Collapse in={openDate}>
+          <DateFilter {...rest} />
+        </Collapse>
+      </Box>
+
+      {/* Archived – new accordion ------------------------------------------ */}
+      <Box mt={3}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="subtitle2" sx={{ fontSize: '12px !important' }}>
+            ARCHIVED
+          </Typography>
+          {/* Re‑use the same open/close flag as Date (or create a new one if you prefer) */}
+          <IconButton
+            size="small"
+            onClick={() => setOpenDate(!openDate)}
+            sx={{ p: 0 }}>
+            {openDate ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
+        </Box>
+
+        <Collapse in={openDate}>
+          <ArchivedFilter archive={archive} setArchive={setArchive} />
+        </Collapse>
+      </Box>
+    </Box>
+  );
+}
+
+src/components/alerts/TypeFilters.jsx:
+import React from 'react';
+import {
+  Box,
+  Typography,
+  FormControlLabel,
+  Checkbox,
+  Collapse,
+  IconButton,
+  useTheme,
+} from '@mui/material';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+
+export default function TypeFilters({
+  typeGroups,
+  selectedTypes,
+  sortedTypes,
+  facetedCounts,
+  toggleType,
+  toggleGroup,
+  openGroups,
+  setOpenGroups,
+}) {
+  const theme = useTheme();
+
+  const smallControlSx = {
+    fontSize: '12px !important',
+    '& .MuiSvgIcon-root': { fontSize: '12px !important' },
+  };
+
+  return (
+    <>
+      {typeGroups.map((group) => {
+        const groupOpen = openGroups[group.name];
+        const groupCount = group.types.reduce(
+          (sum, t) => sum + facetedCounts[t],
+          0
+        );
+        const allSelected = group.types.every((t) => selectedTypes.includes(t));
+        const someSelected =
+          !allSelected && group.types.some((t) => selectedTypes.includes(t));
+
+        return (
+          <Box key={group.name} mb={1} pl={1.5}>
+            {/* group header */}
+            <Box
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between">
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontSize: '12px !important',
+                  fontWeight: 600,
+                  mt: 1,
+                  mb: 0.5,
+                }}>
+                {group.name} ({groupCount})
+              </Typography>
+
+              <Box display="flex" alignItems="center">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      size="small"
+                      sx={smallControlSx}
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={() => toggleGroup(group)}
+                    />
+                  }
+                  label=""
+                  sx={{ margin: 0 }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    setOpenGroups((prev) => ({
+                      ...prev,
+                      [group.name]: !prev[group.name],
+                    }))
+                  }
+                  sx={{ p: 0, ml: 0.5 }}>
+                  {groupOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                </IconButton>
+              </Box>
+            </Box>
+
+            {/* types list */}
+            <Collapse in={groupOpen}>
+              {sortedTypes
+                .filter((t) => group.types.includes(t))
+                .map((type) => {
+                  const count = facetedCounts[type];
+                  const disabled = count === 0;
+                  return (
+                    <Box
+                      key={type}
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      sx={{
+                        opacity: disabled
+                          ? theme.palette.action.disabledOpacity
+                          : 1,
+                      }}>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            size="small"
+                            sx={smallControlSx}
+                            checked={selectedTypes.includes(type)}
+                            onChange={() => toggleType(type)}
+                            disabled={disabled}
+                          />
+                        }
+                        label={type}
+                        sx={{
+                          '& .MuiFormControlLabel-label': {
+                            fontSize: '12px !important',
+                          },
+                          margin: 0,
+                        }}
+                      />
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ fontSize: '12px !important' }}>
+                        {count}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+            </Collapse>
+          </Box>
+        );
+      })}
+    </>
+  );
+}
+
 
